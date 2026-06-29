@@ -1,0 +1,1 @@
+// Nội dung Endpoint thì Long điền vào, mục đích để C# đọc API của Ruby, còn Ruby thì đọc API của C# để lấy dữ liệu về hiển thị lên React
