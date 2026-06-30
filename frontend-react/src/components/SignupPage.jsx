@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { authClient, generateNextAccountCode } from '../api/authClient'
+import { useEffect, useState } from 'react'
+import { authClient, generateNextAccountCodeFromBackend } from '../api/authClient'
 
 const signupRoles = [
   { value: '4', label: 'Sinh vien' },
@@ -71,21 +71,47 @@ function SignupPage() {
     fullName: '',
     email: '',
     roleId: '4',
-    code: generateNextAccountCode(4),
+    code: '',
     password: '',
     acceptedTerms: false,
   })
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isGeneratingCode, setIsGeneratingCode] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
+  const isStudentRole = form.roleId === '4'
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function refreshGeneratedCode() {
+      if (!isStudentRole) {
+        setForm((current) => ({ ...current, code: '' }))
+        setIsGeneratingCode(false)
+        return
+      }
+
+      setIsGeneratingCode(true)
+      const nextCode = await generateNextAccountCodeFromBackend(4)
+      if (isMounted) {
+        setForm((current) => ({ ...current, code: nextCode }))
+        setIsGeneratingCode(false)
+      }
+    }
+
+    refreshGeneratedCode()
+    return () => {
+      isMounted = false
+    }
+  }, [isStudentRole])
 
   function updateForm(event) {
     const { checked, name, type, value } = event.target
     setForm((current) => ({
       ...current,
       [name]: type === 'checkbox' ? checked : value,
-      ...(name === 'roleId' ? { code: generateNextAccountCode(Number(value)) } : {}),
+      ...(name === 'roleId' && value !== '4' ? { code: '' } : {}),
     }))
   }
 
@@ -105,8 +131,8 @@ function SignupPage() {
       const result = await authClient.signup({
         HoTen: form.fullName.trim(),
         Email: form.email.trim(),
-        MaDinhDanh: form.code.trim(),
-        MaSinhVien: form.roleId === '4' ? form.code.trim() : undefined,
+        MaDinhDanh: isStudentRole ? form.code.trim() : undefined,
+        MaSinhVien: isStudentRole ? form.code.trim() : undefined,
         VaiTroID: Number(form.roleId),
         MatKhau: form.password,
       })
@@ -184,14 +210,16 @@ function SignupPage() {
                     onChange={updateForm}
                     value={form.roleId}
                   />
-                  <InputShell
-                    icon="id"
-                    name="code"
-                    onChange={() => {}}
-                    placeholder="Ma sinh vien / ma can bo"
-                    readOnly
-                    value={form.code}
-                  />
+                  {isStudentRole && (
+                    <InputShell
+                      icon="id"
+                      name="code"
+                      onChange={() => {}}
+                      placeholder="Ma sinh vien"
+                      readOnly
+                      value={isGeneratingCode ? 'Dang tao ma...' : form.code}
+                    />
+                  )}
                   <InputShell
                     icon="lock"
                     name="password"
@@ -217,7 +245,7 @@ function SignupPage() {
                 {error && <p className="auth-message auth-message--error">{error}</p>}
                 {notice && <p className="auth-message auth-message--success">{notice}</p>}
 
-                <button className="button button--signup" disabled={isSubmitting} type="submit">
+                <button className="button button--signup" disabled={isSubmitting || isGeneratingCode} type="submit">
                   {isSubmitting ? 'Dang tao tai khoan...' : 'Sign up'}
                 </button>
 

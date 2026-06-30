@@ -133,6 +133,29 @@ export function generateNextAccountCode(roleId = 4) {
   return `${prefix}${String(maxNumber + 1).padStart(3, '0')}`
 }
 
+export async function generateNextAccountCodeFromBackend(roleId = 4) {
+  const role = Number(roleId)
+
+  if (role !== 4) return ''
+
+  try {
+    const students = await examEndpoints.getSinhVien()
+    const maxNumber = Array.isArray(students)
+      ? students.reduce((maxValue, student) => {
+          const code = String(student.MaSinhVien || '').trim().toUpperCase()
+          if (!code.startsWith('SV')) return maxValue
+
+          const number = Number(code.slice(2).replace(/\D/g, ''))
+          return Number.isFinite(number) ? Math.max(maxValue, number) : maxValue
+        }, 0)
+      : 0
+
+    return `SV${String(maxNumber + 1).padStart(3, '0')}`
+  } catch {
+    return generateNextAccountCode(role)
+  }
+}
+
 function persistUsers(users) {
   const normalizedUsers = users.map(normalizeUser)
   writeJson(USERS_KEY, normalizedUsers)
