@@ -10,7 +10,10 @@ namespace backend_csharp.Controllers;
 public class WorkflowController(ExamDbContext dbContext) : ApiControllerBase
 {
     [HttpPost("auto_phan_phong")]
-    public async Task<IActionResult> AutoPhanPhong(int id, [FromBody] JsonElement body)
+    public async Task<IActionResult> AutoPhanPhong(
+        int id,
+        [FromQuery(Name = "nguoi_phan_id")] int? nguoiPhanQueryID,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] JsonElement? body = null)
     {
         KyThi? kyThi = await dbContext.KyThi.FindAsync(id);
         if (kyThi is null)
@@ -23,7 +26,7 @@ public class WorkflowController(ExamDbContext dbContext) : ApiControllerBase
             return UnprocessableEntity(new { error = "Only published exams can be assigned to rooms.", current_status = kyThi.TrangThai });
         }
 
-        int? nguoiPhanID = ReadOptionalInt(body, "nguoi_phan_id");
+        int? nguoiPhanID = nguoiPhanQueryID ?? ReadOptionalInt(body, "nguoi_phan_id");
         List<int> assignedIds = await dbContext.PhanPhong
             .Where(record => record.KyThiID == kyThi.KyThiID)
             .Select(record => record.DangKyThiID)
@@ -183,7 +186,10 @@ public class WorkflowController(ExamDbContext dbContext) : ApiControllerBase
     }
 
     [HttpPost("open_diem_danh")]
-    public async Task<IActionResult> OpenDiemDanh(int id, [FromBody] JsonElement body)
+    public async Task<IActionResult> OpenDiemDanh(
+        int id,
+        [FromQuery(Name = "nguoi_ghi_nhan_id")] int? nguoiGhiNhanQueryID,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] JsonElement? body = null)
     {
         KyThi? kyThi = await dbContext.KyThi.FindAsync(id);
         if (kyThi is null)
@@ -196,7 +202,7 @@ public class WorkflowController(ExamDbContext dbContext) : ApiControllerBase
             return UnprocessableEntity(new { error = "Only seated exams can open attendance.", current_status = kyThi.TrangThai });
         }
 
-        int? nguoiGhiNhanID = ReadOptionalInt(body, "nguoi_ghi_nhan_id");
+        int? nguoiGhiNhanID = nguoiGhiNhanQueryID ?? ReadOptionalInt(body, "nguoi_ghi_nhan_id");
         List<int> attendanceIds = await dbContext.DiemDanh.Where(record => record.KyThiID == kyThi.KyThiID).Select(record => record.DangKyThiID).ToListAsync();
         List<XepCho> seats = await dbContext.XepCho
             .Where(record => record.KyThiID == kyThi.KyThiID && !attendanceIds.Contains(record.DangKyThiID))
@@ -245,9 +251,9 @@ public class WorkflowController(ExamDbContext dbContext) : ApiControllerBase
         return Ok(new { message = "Attendance opened.", created = created.Count, ky_thi = kyThi });
     }
 
-    private static int? ReadOptionalInt(JsonElement body, string propertyName)
+    private static int? ReadOptionalInt(JsonElement? body, string propertyName)
     {
-        if (body.ValueKind != JsonValueKind.Object || !body.TryGetProperty(propertyName, out JsonElement property))
+        if (!body.HasValue || body.Value.ValueKind != JsonValueKind.Object || !body.Value.TryGetProperty(propertyName, out JsonElement property))
         {
             return null;
         }

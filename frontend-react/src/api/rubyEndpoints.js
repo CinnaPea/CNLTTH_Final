@@ -6,6 +6,30 @@ export const rubyEndpoints = {
     health() {
         return rubyAPI.get("/health");
     },
+    login(payload) {
+        return rubyAPI.post("/auth/login", payload);
+    },
+    signup(payload) {
+        return rubyAPI.post("/auth/signup", payload);
+    },
+    getNguoiDung() {
+        return rubyAPI.get("/nguoi_dung");
+    },
+    getNguoiDungById(id) {
+        return rubyAPI.get(`/nguoi_dung/${id}`);
+    },
+    createNguoiDung(payload) {
+        return rubyAPI.post("/nguoi_dung", { nguoi_dung: payload });
+    },
+    updateNguoiDung(id, payload) {
+        return rubyAPI.patch(`/nguoi_dung/${id}`, { nguoi_dung: payload });
+    },
+    deleteNguoiDung(id) {
+        return rubyAPI.delete(`/nguoi_dung/${id}`);
+    },
+    getVaiTro() {
+        return rubyAPI.get("/vai_tro");
+    },
     getMonThi() {
         return rubyAPI.get("/mon_thi");
     },

@@ -1,0 +1,355 @@
+openapi: 3.0.3
+info:
+  title: ExamFlow Shared API Contract
+  version: 0.2.0
+  description: >
+    Shared React-facing contract for the Ruby primary API and C# backup API.
+    Both providers must expose these paths under /api/v1 and use the same SQL Server data.
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Ruby primary API
+  - url: http://localhost:5014/api/v1
+    description: C# backup API
+tags:
+  - name: Health
+  - name: Auth
+  - name: Accounts
+  - name: Exam Operations
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Check API and SQL Server health.
+      responses:
+        "200":
+          description: API and SQL Server are healthy.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: API process is alive but SQL Server is unavailable.
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Authenticate a user against NguoiDung.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                identifier:
+                  type: string
+                email:
+                  type: string
+                password:
+                  type: string
+              required: [password]
+      responses:
+        "200":
+          description: Login succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "401":
+          description: Invalid credentials.
+  /auth/signup:
+    post:
+      tags: [Auth]
+      summary: Create a SQL-backed user account.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignupRequest"
+      responses:
+        "201":
+          description: Signup succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "409":
+          description: Email or generated student code already exists.
+  /nguoi_dung:
+    get:
+      tags: [Accounts]
+      summary: List user accounts.
+      responses:
+        "200":
+          description: User list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NguoiDung"
+    post:
+      tags: [Accounts]
+      summary: Create a user account.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nguoi_dung:
+                  $ref: "#/components/schemas/AccountWrite"
+      responses:
+        "201":
+          description: Created user account.
+  /nguoi_dung/{id}:
+    get:
+      tags: [Accounts]
+      summary: Get a user account.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: User account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NguoiDung"
+        "404":
+          description: User not found.
+    patch:
+      tags: [Accounts]
+      summary: Update a user account.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nguoi_dung:
+                  $ref: "#/components/schemas/AccountWrite"
+      responses:
+        "200":
+          description: Updated user account.
+    delete:
+      tags: [Accounts]
+      summary: Delete a user account.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Deleted user account.
+        "409":
+          description: User is referenced by operational data.
+  /mon_thi:
+    get:
+      tags: [Exam Operations]
+      summary: List subjects.
+      responses:
+        "200":
+          description: Subject list.
+    post:
+      tags: [Exam Operations]
+      summary: Create a subject.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          description: Created.
+  /ky_thi:
+    get:
+      tags: [Exam Operations]
+      summary: List exams.
+      responses:
+        "200":
+          description: Exam list.
+    post:
+      tags: [Exam Operations]
+      summary: Create an exam.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          description: Created.
+  /sinh_vien:
+    get:
+      tags: [Exam Operations]
+      summary: List students.
+      responses:
+        "200":
+          description: Student list.
+    post:
+      tags: [Exam Operations]
+      summary: Create a student.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          description: Created.
+  /phong_thi:
+    get:
+      tags: [Exam Operations]
+      summary: List rooms.
+      responses:
+        "200":
+          description: Room list.
+    post:
+      tags: [Exam Operations]
+      summary: Create a room.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          description: Created.
+  /dang_ky_thi:
+    get:
+      tags: [Exam Operations]
+      summary: List exam registrations.
+      responses:
+        "200":
+          description: Registration list.
+    post:
+      tags: [Exam Operations]
+      summary: Create an exam registration.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          description: Created.
+  /phan_phong:
+    get:
+      tags: [Exam Operations]
+      summary: List room assignments.
+      responses:
+        "200":
+          description: Room assignment list.
+  /xep_cho:
+    get:
+      tags: [Exam Operations]
+      summary: List seat assignments.
+      responses:
+        "200":
+          description: Seat assignment list.
+    post:
+      tags: [Exam Operations]
+      summary: Create a seat assignment.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          description: Created.
+  /diem_danh:
+    get:
+      tags: [Exam Operations]
+      summary: List attendance records.
+      responses:
+        "200":
+          description: Attendance list.
+components:
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Required before unsafe write retry is enabled across Ruby/C#.
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, unhealthy]
+        backend:
+          type: string
+          enum: [ruby, csharp]
+        database:
+          type: string
+        message:
+          type: string
+    AuthSession:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/NguoiDung"
+        authSource:
+          type: string
+        generatedCode:
+          type: string
+    SignupRequest:
+      type: object
+      properties:
+        HoTen:
+          type: string
+        Email:
+          type: string
+        MatKhau:
+          type: string
+        VaiTroID:
+          type: integer
+        MaDinhDanh:
+          type: string
+        MaSinhVien:
+          type: string
+      required: [HoTen, Email, MatKhau]
+    NguoiDung:
+      type: object
+      properties:
+        NguoiDungID:
+          type: integer
+        Email:
+          type: string
+        HoTen:
+          type: string
+        VaiTroID:
+          type: integer
+        TenVaiTro:
+          type: string
+        TrangThai:
+          oneOf:
+            - type: integer
+            - type: boolean
+        MaSinhVien:
+          type: string
+        TaoLuc:
+          type: string
+          format: date-time
+        CapNhatLuc:
+          type: string
+          format: date-time
+    AccountWrite:
+      type: object
+      properties:
+        Email:
+          type: string
+        HoTen:
+          type: string
+        MatKhau:
+          type: string
+        MatKhauHash:
+          type: string
+        VaiTroID:
+          type: integer
+        TrangThai:
+          oneOf:
+            - type: integer
+            - type: boolean
+        MaSinhVien:
+          type: string

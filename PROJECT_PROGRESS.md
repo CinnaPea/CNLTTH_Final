@@ -1,6 +1,6 @@
 # Project Progress Reference
 
-Last reviewed: 2026-06-28
+Last reviewed: 2026-06-29
 
 This file is the working project handoff note. It should stay aligned with the real implementation, especially because the project goal changed from a Ruby/C# responsibility split into a backend failover demo.
 
@@ -22,7 +22,7 @@ Important correction from the old plan:
 
 ## Current Status Snapshot
 
-The project currently works mainly on the React + Ruby path.
+The project currently works on the React + Ruby path and the React + C# fallback path. The newly pulled C# backend has been aligned with the Ruby operational surface closely enough for the frontend failover demo to succeed against the shared SQL Server data.
 
 Completed or mostly completed:
 
@@ -31,18 +31,50 @@ Completed or mostly completed:
 - Role-aware session behavior exists.
 - Admin dashboard exists and is connected to Ruby-backed operational data.
 - CanBoDaoTao, CanBoKhaoThi, and SinhVien dashboard views exist with role-specific layouts.
-- Admin operational tabs are connected to the Ruby API for the main exam workflow.
+- Admin operational tabs are connected through the neutral failover API provider for the main exam workflow.
 - Account management exists for the frontend demo auth layer.
 - Ruby API exposes most operational endpoints needed by React.
-- SQL Server remains the database behind the Ruby API.
+- C# API now exposes the same main `/api/v1/...` operational routes as Ruby.
+- Ruby and C# `/health` responses now share the same shape and include backend identity.
+- React has both `rubyEndpoints` and `csharpEndpoints` helper maps with the same domain functions.
+- React now has a neutral `examEndpoints` provider that operational pages use instead of importing Ruby directly.
+- Admin can manually choose Ruby or C# from the app topbar.
+- The app can automatically switch to the other backend when the active backend fails health checks or an API request fails with a network/5xx error.
+- The Ruby-to-C# failover path has been live-tested successfully: Ruby was stopped, C# remained connected to SQL Server, and the Admin dashboard continued displaying the same workflow data.
+- SQL Server remains the shared database used by both backend implementations.
 
 Not completed yet:
 
-- C# backup backend is still a placeholder.
-- Automatic frontend failover from Ruby to C# is not implemented.
-- Ruby and C# do not yet share a formal OpenAPI/contract file.
-- Real backend auth endpoints are not implemented.
-- Account CRUD is still frontend/localStorage-based around the seeded account shape.
+Priority order for the remaining backend/frontend integration work:
+
+1. **P0 - Shared API contract:** Implemented with root `openapi.yaml`. Ruby/C# now have a concrete shared contract reference for health, auth, account CRUD, and the main operational resources.
+2. **P1 - Write failover safety:** Implemented as a guardrail. Frontend writes now send an `Idempotency-Key`, but automatic cross-provider retry is blocked for mutating actions until a shared SQL idempotency table exists.
+3. **P2 - Backend auth endpoints:** Implemented in Ruby and C# as `/api/v1/auth/login` and `/api/v1/auth/signup`, using the existing seeded/demo password convention.
+4. **P3 - Backend account CRUD:** Implemented in Ruby and C# as `/api/v1/nguoi_dung`; the Admin Account page now loads/saves/deletes through the shared provider layer.
+
+## Completion Dashboard
+
+These percentages are approximate implementation-readiness estimates for the current subject demo, not production-readiness scores.
+
+| Front | Approx. completion | Current state | Main remaining work |
+| --- | ---: | --- | --- |
+| Landing page and public UX | 90% | Redesigned landing page, drawer, workflow overlays, footer, assets, session-aware header, hero actions. | Final responsive polish, keyboard/focus polish for overlays, optional backend badge for demo mode. |
+| Auth and session UX | 82% | Login/signup now call the shared Ruby/C# API provider. Signup still generates role codes in the UI when needed. Sessions redirect by role. Password visibility toggles exist. | Production-grade password hashing, token validation, server-side permissions, account/profile polish. |
+| Admin workflow | 90% | Admin dashboard, SQL-backed account CRUD, full operational navigation, backend selector, failover/health panel, exports and audit-readiness cues. Live failover was validated from the Admin dashboard. | Persisted audit logs, stronger destructive-action authorization, more account validation. |
+| CanBoDaoTao workflow | 80% | Role dashboard, subject/exam/student/registration pages, setup checklist, handoff readiness, import entry points. | Real CSV/Excel import, persisted handoff state, server-side capacity validation. |
+| CanBoKhaoThi workflow | 84% | Role dashboard, rooms, room assignment, seating, attendance, conflict/readiness checks, printable operations summary. | Persisted lock/finalize states, official per-room print sheets, server-side conflict enforcement. |
+| SinhVien workflow | 72% | Student dashboard, exam ticket, generated check-in code, upcoming exam reminders, read-only counters. | Backend profile API, real QR/barcode generation, downloadable ticket PDF, optional result/history module. |
+| React operational frontend | 91% | CRUD/workflow pages are connected through neutral `examEndpoints`; role shell, dashboards, backend selector, account CRUD, and automatic read failover are active. | Better loading states, more automated browser tests, import workflows, visible failover event log. |
+| Ruby API | 89% | Main operational API works, includes backend identity in health response, and now exposes auth/account/role endpoints under `/api/v1`. | Standardized error envelope, SQL-backed idempotency support, production auth hardening. |
+| C# API | 88% | Matching controller surface exists, compiles, health tests SQL connectivity, connection string aligns with Ruby, live fallback reads succeed, and auth/account/role endpoints are present. | Endpoint-by-endpoint response-shape audit, SQL-backed idempotency support, write-heavy failover testing. |
+| SQL Server data/schema | 82% | Shared source of truth exists with seeded role/user/exam domain data and is now confirmed usable by both Ruby and C#. | Confirm all partner environments use same schema, add audit/idempotency tables if needed. |
+| Failover demo | 90% | Manual Admin backend switch, health polling, automatic read retry, guarded write behavior, and Ruby-to-C# shutdown test are working. | SQL-backed idempotency table before unsafe write retry demo, visible failover toast/log, scripted demo checklist. |
+| Testing and verification | 69% | `npm run lint`, `npm run build`, C# compile check, Ruby route sanity checks, Ruby syntax checks, and live Ruby-to-C# failover have passed recently. | Contract tests against both APIs, Playwright smoke tests, full end-to-end SQL workflow test. |
+| Documentation and handoff | 90% | This progress file tracks priorities, actors, APIs, failover, risks, next steps, and the successful failover milestone. Root `openapi.yaml` now exists. | Keep updated after live auth/account endpoint tests and write-failover tests. |
+
+Overall demo completion estimate: **88%**.
+
+The project is strong enough for final demo rehearsal on read-heavy and normal workflow navigation. The failover demo is functionally proven for backend outage recovery. Auth/account APIs now exist on both providers. It is still not safe to claim production-grade write failover until a shared SQL idempotency or operation-tracking table is added.
 
 ## Architecture Overview
 
@@ -75,9 +107,29 @@ Ruby currently owns the working implementation for:
 
 ### C# API
 
-C# is the future backup backend. At the time of this review, `backend-csharp/` is still only a placeholder and does not expose the matching API yet.
+C# is now a real backup backend candidate instead of a placeholder. It contains controllers for the same main operational resources exposed by Ruby:
 
-For the new project goal, C# must mirror Ruby endpoint paths, request bodies, response shapes, status codes, and error envelopes closely enough that React can swap providers without page-specific changes.
+- Health
+- Subjects
+- Exams
+- Registrations
+- Rooms
+- Students
+- Room assignment
+- Seat assignment
+- Attendance
+- Workflow actions
+
+The current C# implementation is practically lined up with Ruby at the route/action level. It also accepts Ruby-style wrapped request bodies such as `{ mon_thi: payload }`, `{ ky_thi: payload }`, and so on.
+
+Important parity fix made on 2026-06-29:
+
+- `auto_phan_phong` now accepts `nguoi_phan_id` from the query string, matching Ruby and the current React helper.
+- `open_diem_danh` now accepts `nguoi_ghi_nhan_id` from the query string, matching Ruby and the current React helper.
+- Both C# workflow actions now allow an empty POST body, matching how the React/Ruby workflow calls are currently made.
+- C# `/health` now returns `backend: "csharp"`.
+
+For the new project goal, C# must continue to mirror Ruby endpoint paths, request bodies, response shapes, status codes, and error envelopes closely enough that React can swap providers without page-specific changes.
 
 ### React Frontend
 
@@ -88,9 +140,9 @@ React is the only user-facing demo UI. It currently has:
 - Session-aware header/account menu
 - Role-aware dashboard shell
 - Admin/CanBo/SinhVien page access
-- Ruby-connected operational pages
+- Failover-provider-connected operational pages
 
-The frontend still uses Ruby-specific helpers in many pages. A neutral failover client is a future requirement.
+Operational pages now use `examEndpoints`, a neutral provider that delegates to the active backend. Ruby and C# helpers remain available underneath the provider.
 
 ## Four Role Workflows
 
@@ -125,14 +177,16 @@ Admin-specific notes:
 - Account management is currently frontend-local and based on seeded/demo account data.
 - Admin cannot delete or demote the currently logged-in account in the demo layer.
 - Admin is currently the best role for end-to-end workflow testing because all tabs are reachable.
+- Admin dashboard now shows Ruby/C# backend health and the latest automatic failover timestamp.
+- Admin dashboard now has a CSV system snapshot export for core operational counts.
+- Admin dashboard now has an audit-readiness panel pointing at account/data review and attendance follow-up queues.
 
-Future Admin improvements:
+Remaining Admin improvements:
 
 - Move account CRUD to a real backend auth/user API.
 - Add server-side role authorization.
-- Add audit logs for destructive actions.
-- Add system health/failover status to the dashboard.
-- Add import/export tools for user, student, and exam data.
+- Add real persisted audit logs for destructive actions.
+- Expand import/export beyond current account/exam/dashboard CSV/PDF surfaces.
 
 ### 2. CanBoDaoTao
 
@@ -151,20 +205,22 @@ Current implemented access:
 
 - Role-specific dashboard.
 - Academic setup-oriented navigation.
-- Subject/exam/student/registration data is pulled from the Ruby API where the page is connected.
+- Subject/exam/student/registration data is pulled through the neutral failover provider where the page is connected.
+- Dashboard now includes an exam setup checklist for schedule, registration count, room capacity, and handoff readiness.
+- Dashboard now includes bulk-import entry points to student and registration workflows.
+- Dashboard now summarizes how many exams are ready to hand off to CanBoKhaoThi.
 
 Recommended responsibility boundary:
 
 - CanBoDaoTao should own `Mon thi`, `Ky thi`, `Thi sinh`, and `Dang ky thi`.
 - CanBoDaoTao should not be the main owner of room assignment, seating, or attendance unless the project decides to allow broader permissions.
 
-Future CanBoDaoTao improvements:
+Remaining CanBoDaoTao improvements:
 
-- Add bulk student import from CSV/Excel.
-- Add bulk registration import.
-- Add validation for exam registration capacity before handoff.
-- Add setup completion/checklist state for each exam.
-- Add clearer handoff status to CanBoKhaoThi.
+- Add real CSV/Excel parsers for bulk student import.
+- Add real CSV/Excel parsers for bulk registration import.
+- Persist setup completion/handoff status in SQL instead of deriving it only in the dashboard.
+- Add server-side validation for exam registration capacity before handoff.
 
 ### 3. CanBoKhaoThi
 
@@ -187,6 +243,11 @@ Current implemented access:
 - Role-specific operations dashboard.
 - Room, room assignment, seating, and attendance screens are the main fit for this actor.
 - The technical design was adapted from the external mockup reference while preserving the app CSS direction.
+- Dashboard now detects room over-capacity and duplicate-seat risk for the selected exam.
+- Dashboard now shows a finalize/readiness signal before printing or handing off room operations.
+- Dashboard now has a printable room operations summary.
+- Dashboard now shows live attendance counts by status for the selected exam.
+- Topbar failover controls/status are visible during operations.
 
 Recommended responsibility boundary:
 
@@ -194,13 +255,12 @@ Recommended responsibility boundary:
 - CanBoKhaoThi may need read access to exams, subjects, students, and registrations.
 - CanBoKhaoThi should not normally own account administration.
 
-Future CanBoKhaoThi improvements:
+Remaining CanBoKhaoThi improvements:
 
-- Add conflict detection for room capacity and duplicate seats.
-- Add lock/finalize steps for room assignment and seating.
-- Add printable room sheets, seating charts, and attendance sheets.
-- Add real-time status summary during attendance.
-- Add failover demo controls showing Ruby/C# provider state during active operations.
+- Persist lock/finalize steps for room assignment and seating in SQL.
+- Add official printable room sheets, seating charts, and attendance sheets per room.
+- Add server-side conflict validation for capacity and duplicate seats.
+- Add real-time push updates if the project later needs multiple operators working at once.
 
 ### 4. SinhVien
 
@@ -217,18 +277,21 @@ Current implemented access:
 
 - Role-specific student dashboard.
 - Student dashboard derives ticket-style information from registrations, room assignment, seat assignment, and attendance where available.
+- Student dashboard now includes a printable exam ticket.
+- Student dashboard now shows a barcode-style check-in code based on SBD/student identity.
+- Student dashboard now shows upcoming exam reminders.
+- Student dashboard now includes read-only exam history counters.
 
 Recommended responsibility boundary:
 
 - SinhVien should be read-only for operational data.
 - SinhVien should see only their own exam information.
 
-Future SinhVien improvements:
+Remaining SinhVien improvements:
 
-- Add self-service profile view.
-- Add exam ticket print/download.
-- Add exam schedule reminders.
-- Add QR code or barcode for check-in.
+- Move self-service profile editing into a real backend account/profile API.
+- Replace the current barcode-style visual with a real QR/barcode generator if required.
+- Add downloadable ticket PDF generation if browser print is not enough.
 - Add read-only exam result/history area if the subject scope later expands.
 
 ## Frontend Implementation Status
@@ -255,7 +318,7 @@ Future landing improvements:
 - Add better image cropping per viewport.
 - Add keyboard focus trapping inside overlays.
 - Add Playwright checks for overlay open/close behavior.
-- Add backend health badge only when the failover layer exists.
+- Optionally add a compact landing-page backend badge for demo mode.
 
 ### Auth And Session
 
@@ -263,7 +326,10 @@ Current state:
 
 - Login/signup screens are still visually close to the original design.
 - Pop-in animation was added for visual polish.
-- Login works with seeded/demo users.
+- Login now calls `/api/v1/auth/login` through the shared Ruby/C# provider layer.
+- Signup now self-generates `Ma sinh vien / ma can bo` based on selected role.
+- Signup now offers `Sinh vien`, `Can bo dao tao`, and `Can bo khao thi` account types.
+- Signup now calls `/api/v1/auth/signup` through the shared Ruby/C# provider layer.
 - Admin redirects directly to the dashboard.
 - CanBoDaoTao, CanBoKhaoThi, and SinhVien return to landing after login.
 - Landing header shows the session account dropdown when logged in.
@@ -271,17 +337,16 @@ Current state:
 
 Current limitation:
 
-- Ruby does not yet provide real auth endpoints.
-- C# does not yet provide auth endpoints.
-- The frontend auth layer uses demo/local fallback behavior around the seeded SQL-style account data.
+- Auth endpoints are demo-grade and use the existing `hashed_...` seeded password convention.
+- Auth endpoints do not yet issue signed JWT/session tokens.
+- Role permissions are still mostly frontend-driven.
 
 Future auth improvements:
 
-- Add `/api/v1/auth/login`, `/api/v1/auth/logout`, `/api/v1/auth/me`, and optionally `/api/v1/auth/register`.
-- Use one token/session contract for both Ruby and C#.
-- Move account CRUD out of localStorage.
+- Add `/api/v1/auth/logout`, `/api/v1/auth/me`, and token/session validation.
 - Add password hashing/verification in backend.
 - Add server-enforced role permissions.
+- Replace client-side generated IDs with server-side ID counters when the auth service is implemented.
 
 ### App Shell And Navigation
 
@@ -292,12 +357,16 @@ Current state:
 - Navigation is role-aware.
 - Old letter badges were replaced with more meaningful symbols/icons.
 - The app shell is used by Admin and the other role dashboards.
+- Topbar shows the active backend provider.
+- Admin can manually switch active provider between Ruby API and C# API.
+- Background health checks run while the app shell is mounted.
+- If the active provider fails health checks and the other provider is healthy, the frontend switches automatically.
 
 Future shell improvements:
 
 - Replace remaining ASCII/symbol fallback icons with a consistent icon library if dependency policy allows.
 - Add compact/collapsed sidebar mode.
-- Add active backend provider indicator after failover is implemented.
+- Add a fuller backend health panel if the compact topbar selector is not enough for the final demo.
 
 ### Dashboard
 
@@ -313,9 +382,9 @@ Current state:
 Future dashboard improvements:
 
 - Add loading skeletons and clearer empty states.
-- Add backend health/failover status.
 - Add links from each metric directly into filtered pages.
 - Add stronger mobile layout testing.
+- Add deeper drill-down pages from the new role-specific readiness panels.
 
 ### Account Page
 
@@ -326,15 +395,10 @@ Current state:
 - List can be hidden.
 - CSV/PDF-style export controls exist for the demo.
 - Non-admin users see their own account information.
-
-Current limitation:
-
-- Account data is frontend-local, not Ruby-backed.
-- This is intentionally temporary because real auth/user ownership has not been decided at backend level.
+- Admin account CRUD now uses `/api/v1/nguoi_dung` through the same Ruby/C# provider layer used by the operational pages.
 
 Future account improvements:
 
-- Implement backend account endpoints.
 - Add password reset/change password.
 - Add account lock/unlock.
 - Add audit log for role changes.
@@ -487,6 +551,14 @@ Future improvements:
 Ruby routes currently include the main operational contract:
 
 - `GET /api/v1/health`
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/signup`
+- `GET /api/v1/vai_tro`
+- `GET /api/v1/nguoi_dung`
+- `POST /api/v1/nguoi_dung`
+- `GET /api/v1/nguoi_dung/:id`
+- `PATCH/PUT /api/v1/nguoi_dung/:id`
+- `DELETE /api/v1/nguoi_dung/:id`
 - `GET /api/v1/mon_thi`
 - `POST /api/v1/mon_thi`
 - `GET /api/v1/mon_thi/:id`
@@ -531,13 +603,13 @@ Ruby routes currently include the main operational contract:
 - `POST /api/v1/ky_thi/:id/auto_xep_cho`
 - `POST /api/v1/ky_thi/:id/open_diem_danh`
 
-Ruby gaps under the new goal:
+Ruby notes under the new goal:
 
-- `/health` should include a backend identity such as `backend: "ruby"` for failover visibility.
-- Auth endpoints are missing.
+- `/health` now includes backend identity with `backend: "ruby"` for failover visibility.
+- Auth endpoints are implemented but demo-grade.
 - Error response shape is not formally standardized.
 - Some endpoints return different envelope shapes.
-- No shared OpenAPI contract exists.
+- Root `openapi.yaml` now documents the shared contract baseline.
 - CORS/failover behavior needs explicit verification.
 - Rails may still expose generated routes that are not part of the frontend contract.
 - Partial CRUD differences must be intentional and documented, especially:
@@ -547,49 +619,73 @@ Ruby gaps under the new goal:
 
 ## C# Backup API Requirements
 
-C# must become a backup implementation of the same API, not a separate reporting service.
+C# must stay a backup implementation of the same API, not a separate reporting service.
 
-Minimum C# requirements:
+Current C# status after the 2026-06-29 sanity check:
 
-- Connect to the same SQL Server database.
-- Expose the same `/api/v1/...` paths as Ruby.
-- Use the same request JSON keys as Ruby.
-- Use the same response JSON keys as Ruby.
-- Use the same status code behavior as Ruby.
-- Support the same workflow actions:
+- Connects through Entity Framework to the same SQL Server database target as Ruby: `PEANUT\SQLEXPRESS` and `CNLTTH_HeThongToChucKyThi`.
+- Exposes the same main `/api/v1/...` paths as Ruby.
+- Uses the same PascalCase SQL/domain property names in JSON.
+- Accepts Ruby-style wrapped request JSON through `ApiControllerBase.ReadBody`.
+- Supports the same workflow actions:
   - auto room assignment
   - auto seating
   - open attendance
   - publish/close exam
   - cancel registration
-- Return a clear health response identifying C# as the active backend.
+- Returns health with `backend: "csharp"`.
+- C# `/health` now performs a real SQL connectivity check with `CanConnectAsync`, preventing a false healthy state when Kestrel is alive but SQL access is broken.
+- C# now exposes `/api/v1/auth/login`, `/api/v1/auth/signup`, `/api/v1/vai_tro`, and `/api/v1/nguoi_dung`.
+- Compiles successfully with `dotnet build`.
+- Live Ruby-to-C# failover was validated from the Admin dashboard after restarting C# with the corrected SQL Server connection string.
 
-Recommended C# implementation order:
+Known C# parity notes:
 
-1. Health endpoint.
-2. Read-only endpoints needed by dashboard and list pages.
-3. CRUD endpoints for setup data.
-4. Workflow action endpoints.
-5. Seat assignment create/delete behavior.
-6. Attendance update behavior.
-7. Auth endpoints if the team chooses to move auth backend-side before the final demo.
+- C# now accepts the Ruby/React query params for `nguoi_phan_id` and `nguoi_ghi_nhan_id`.
+- C# now allows empty bodies for the no-payload workflow POST actions.
+- C# runs on `http://localhost:5014` according to `backend-csharp/Properties/launchSettings.json`.
+- The frontend C# base URL default was corrected to `http://localhost:5014/api/v1`.
+- The frontend env variable name is now `VITE_CSHARP_API_BASE_URL`.
+- C# auth/account endpoints mirror the Ruby demo-grade contract.
+- Full live endpoint-by-endpoint response-shape testing against SQL Server is still useful, but the critical failover path has now passed a real dashboard test.
+
+Recommended C# next checks:
+
+1. Compare list endpoint response shapes from Ruby and C# using the same SQL data.
+2. Run a disposable exam through Ruby from setup to attendance.
+3. Repeat the same workflow pattern through C#.
+4. Test a controlled write failover only on disposable data.
+5. Decide whether idempotency keys are required before demonstrating automatic retry for POST/PATCH/DELETE.
 
 ## Frontend Failover Gap
 
-The frontend currently has Ruby-specific endpoint helpers. To satisfy the new goal, this should be refactored into a provider-neutral API layer.
+The frontend now has a provider-neutral API layer for operational pages.
 
-Recommended failover design:
+Implemented failover pieces:
 
-1. Define backend providers:
-   - primary: Ruby base URL
-   - backup: C# base URL
-2. Add health probing for both providers.
-3. Route all API calls through a neutral request function.
-4. On network failure or 5xx from Ruby, retry the same request against C# when safe.
-5. Store the active provider in frontend state.
-6. Show active provider somewhere visible in Admin/CanBoKhaoThi dashboard for demo clarity.
-7. Keep endpoint helper names domain-based, not Ruby-based.
-8. Add request/response normalization only if Ruby and C# cannot be made identical.
+- `backendProvider.js` stores active backend choice in `localStorage`.
+- `backendProvider.js` can health-check Ruby and C#.
+- `examEndpoints.js` calls the currently active provider first.
+- `examEndpoints.js` automatically retries the same action on the fallback provider when the active provider has a network failure or 5xx error.
+- `AppTopbar.jsx` shows active provider status.
+- Admin can manually switch providers from `AppTopbar.jsx`.
+- `AppTopbar.jsx` runs background health polling and auto-switches when the active provider is down and the other provider is healthy.
+- Operational pages import `examEndpoints` instead of `rubyEndpoints`.
+
+Current caution:
+
+- The frontend now sends an `Idempotency-Key` header for mutating requests.
+- GET failover is safe.
+- POST/PATCH/DELETE cross-provider retry is intentionally blocked to avoid duplicate SQL changes until backend idempotency storage exists.
+- The successful 2026-06-29 failover test was a real backend outage recovery test with Ruby stopped and C# continuing dashboard data reads from SQL Server.
+
+Future hardening:
+
+1. Add a shared SQL idempotency table keyed by `Idempotency-Key`.
+2. Add a backend event/audit table for operation replay checks.
+3. Add provider-specific response normalization only if live Ruby/C# testing finds shape differences.
+4. Add visible failover toast notifications.
+5. Expand the new Admin backend health panel if the final demo needs deeper diagnostics.
 
 Important caution:
 
@@ -604,41 +700,119 @@ Verified during recent implementation work:
 - `npm run lint` passed after recent frontend changes.
 - `npm run build` passed after recent frontend changes.
 - Ruby routes were sanity checked.
-- The latest frontend operational pages were implemented against existing Ruby helpers.
+- The latest frontend operational pages now use the neutral `examEndpoints` provider.
 - A Vite dev server was previously running at `http://127.0.0.1:5173/` during active frontend testing.
 
 Documentation-only update on 2026-06-28:
 
 - No build or lint run was required for this markdown-only change.
 
+Backend parity sanity check on 2026-06-29:
+
+- Inspected Ruby routes in `backend-ruby/config/routes.rb`.
+- Inspected C# controllers in `backend-csharp/Controllers`.
+- Confirmed C# exposes matching main operational routes for health, subjects, students, rooms, exams, registrations, room assignment, seating, attendance, and workflow actions.
+- Fixed C# workflow query/body parity for `auto_phan_phong` and `open_diem_danh`.
+- Added backend identity to both Ruby and C# health responses.
+- Corrected the frontend C# API base URL default and env variable name.
+- Replaced the placeholder `csharpEndpoints.js` with a real C# endpoint helper mirror.
+- `ruby bin\rails routes` completed successfully.
+- `dotnet build` completed successfully for `backend-csharp`.
+- `npm run build` completed successfully for `frontend-react`.
+
+C# SQL connectivity fix on 2026-06-29:
+
+- Investigated the C# 500 failures after Ruby was stopped.
+- Confirmed the failure was SQL Server connection related, not frontend CORS or failover routing.
+- C# was using `Server=localhost`, while Ruby was using `PEANUT\SQLEXPRESS`.
+- Updated C# `appsettings.json` and `appsettings.Development.json` to use `Server=PEANUT\SQLEXPRESS;Database=CNLTTH_HeThongToChucKyThi`.
+- Enabled SQL Server retry resilience in `Program.cs`.
+- Updated C# `/api/v1/health` to test actual database connectivity instead of returning green only because the API process is alive.
+- `dotnet build` restore succeeded after network approval.
+- Normal build was blocked by the running C# API locking the output binary.
+- `dotnet build --no-restore -o .\bin\codex-check` completed successfully with `0` errors.
+
+Live failover validation on 2026-06-29:
+
+- Ruby API was running as the default backend.
+- C# API was running as the backup backend.
+- React dashboard was running on Vite.
+- Ruby was gracefully stopped.
+- C# continued answering health checks and SQL `SELECT 1` checks.
+- React switched the active provider from Ruby to C#.
+- Admin dashboard continued displaying SQL-backed dashboard data through C#.
+- This validates the core subject goal: when Ruby dies, C# can continue the same workflow through the same React UI and SQL Server data.
+
+Frontend failover implementation on 2026-06-29:
+
+- Added `backendProvider.js`.
+- Added `examEndpoints.js`.
+- Switched operational pages from `rubyEndpoints` to `examEndpoints`.
+- Added Admin manual backend selector to the app topbar.
+- Added health polling and automatic provider switching in the app topbar.
+- Added C# request methods and exported API base URLs from the frontend API client.
+- `npm run lint` completed successfully.
+- `npm run build` completed successfully.
+- Vite dev server was started at `http://127.0.0.1:5173/`.
+
+Signup improvement on 2026-06-29:
+
+- Signup no longer requires users to type the student/staff code.
+- Signup generates `SV###`, `CBDT###`, or `CBKT###` from the chosen account role.
+- Signup falls back to local demo account creation when `VITE_AUTH_API_BASE_URL` is unreachable.
+- `npm run lint` completed successfully.
+- `npm run build` completed successfully.
+
+C# / Ruby auth-account implementation on 2026-06-29:
+
+- Added root `openapi.yaml` as the shared Ruby/C# API contract reference.
+- Added Ruby `/api/v1/auth/login` and `/api/v1/auth/signup`.
+- Added C# `/api/v1/auth/login` and `/api/v1/auth/signup`.
+- Added Ruby `/api/v1/nguoi_dung` CRUD and `/api/v1/vai_tro`.
+- Added C# `/api/v1/nguoi_dung` CRUD and `/api/v1/vai_tro`.
+- Frontend auth now calls the shared provider layer instead of the separate `VITE_AUTH_API_BASE_URL` service.
+- Admin Account page now loads, creates, updates, and deletes users through backend endpoints.
+- Frontend mutating requests now include an `Idempotency-Key`.
+- Frontend automatic cross-provider retry is now limited to read-safe actions and login; mutating actions are blocked from automatic replay until shared SQL idempotency storage exists.
+- Ruby syntax checks passed for the new controllers.
+- Ruby routes confirmed the new auth/account/role endpoints.
+- `dotnet build --no-restore -o .\bin\codex-check` completed successfully for C#.
+- `npm run lint` completed successfully for React.
+- `npm run build` completed successfully for React.
+
 Recommended next tests:
 
 - Run `npm run lint`.
-- Run `npm run build`.
 - Start React and test each role login manually.
+- Test login/signup against Ruby, then C#.
+- Test Admin Account CRUD against Ruby, then C#.
 - Start Ruby and test all Admin workflow tabs against real SQL data.
-- After C# exists, run the same frontend flow against C# directly.
-- Then test failover by starting Ruby, beginning a workflow, killing Ruby, and continuing through C#.
+- Start C# and compare all read endpoints against Ruby using the same SQL database.
+- Run create/update/delete workflow tests against C# directly on disposable data.
+- Test the neutral frontend provider against Ruby-only, C#-only, then Ruby-to-C# failover.
+- Repeat the failover demo once using a scripted sequence so the final presentation is predictable.
+- Test one disposable write workflow on C# directly.
+- Test one controlled write failover on disposable data only.
 
 ## Suggested Future Implementations
 
 ### Highest Priority
 
-- Build C# backup API with matching endpoints.
 - Create a shared OpenAPI spec or endpoint contract document.
-- Refactor frontend API helpers from Ruby-specific naming into provider-neutral naming.
-- Add frontend failover health checks and provider switching.
-- Add backend identity to both Ruby and C# `/health` responses.
+- Run endpoint-by-endpoint response-shape comparisons between Ruby and C#.
 - Standardize error envelopes across Ruby and C#.
+- Add a SQL-backed idempotency table before relying on automatic write retries in the final demo.
+- Add a visible failover toast or timeline log so the demo audience can clearly see when React switches providers.
 
 ### Medium Priority
 
-- Move auth/login/signup/account CRUD into backend endpoints.
 - Add role-based authorization server-side.
-- Add idempotency keys for write operations that may be retried during failover.
+- Add SQL-backed idempotency records for write operations that may be retried during failover.
 - Add audit logging for create/update/delete workflow actions.
 - Add official print styles for room rosters, seating charts, and attendance sheets.
 - Add CSV import for students and registrations.
+- Add a demo reset/seed command so rehearsals can restore the SQL data to a known state.
+- Add an Admin backend diagnostics page with last health check, active provider, fallback provider, and recent failover reason.
 
 ### UI/UX Priority
 
@@ -662,6 +836,17 @@ Recommended next tests:
   - Diem Danh status update
 - Add API contract tests that can run against both Ruby and C#.
 - Add build/lint checks to the normal handoff routine.
+- Add a repeatable failover rehearsal checklist:
+  - start SQL Server
+  - start Ruby
+  - start C#
+  - start React
+  - confirm Ruby active
+  - stop Ruby
+  - confirm C# active
+  - open Dashboard, Phan Phong, Xep Cho, and Diem Danh
+  - restart Ruby
+  - manually switch back or let the selector choose Ruby
 
 ## Target Demo Flow
 
@@ -674,23 +859,33 @@ Current demo flow:
 5. Manage exam setup and operations through Ruby-backed pages.
 6. Optionally log in as CanBoDaoTao, CanBoKhaoThi, or SinhVien to show role-specific dashboards.
 
-Target failover demo flow:
+Validated failover demo flow:
 
 1. Start SQL Server.
 2. Start Ruby API.
 3. Start C# API.
 4. Start React.
 5. React shows Ruby as active provider.
-6. Begin an exam workflow through the frontend.
+6. Open the Admin dashboard and confirm SQL-backed data loads.
 7. Stop Ruby.
 8. React detects Ruby failure.
 9. React switches to C#.
-10. Continue the same workflow using the same SQL data.
+10. Continue dashboard/workflow navigation using the same SQL data.
 11. React shows C# as active provider.
+
+Immediate next implementation path:
+
+1. Turn the successful manual failover into a repeatable demo script.
+2. Compare Ruby/C# response shapes endpoint by endpoint.
+3. Test write actions on disposable data.
+4. Decide how to handle unsafe write retries before demonstrating automatic retry for POST/PATCH/DELETE.
+5. Add visible failover feedback in the UI.
+6. Move auth/account storage toward a real backend contract if the demo scope expands beyond operational failover.
 
 ## Known Risks
 
 - C# may accidentally implement similar but not identical response shapes. This would break provider switching.
+- C# route/action coverage is close, but response parity has not been live-tested endpoint by endpoint yet.
 - Write retry behavior can duplicate records unless idempotency is handled.
 - Account/auth behavior is still demo-level and not secure.
 - Role permissions are mostly frontend-driven until backend authorization exists.

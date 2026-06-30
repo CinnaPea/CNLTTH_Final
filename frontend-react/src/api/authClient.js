@@ -1,4 +1,5 @@
-const AUTH_API_BASE_URL = import.meta.env?.VITE_AUTH_API_BASE_URL || 'http://localhost:4000/api/auth'
+import { examEndpoints } from './examEndpoints'
+
 const SESSION_KEY = 'examflow.auth.session'
 const USERS_KEY = 'examflow.auth.users'
 
@@ -111,6 +112,27 @@ function normalizePasswordHash(password) {
   return value.startsWith('hashed_') ? value : `hashed_${value}`
 }
 
+function getAccountCodePrefix(roleId) {
+  const role = Number(roleId)
+  if (role === 2) return 'CBDT'
+  if (role === 3) return 'CBKT'
+  return 'SV'
+}
+
+export function generateNextAccountCode(roleId = 4) {
+  const prefix = getAccountCodePrefix(roleId)
+  const users = getAccountUsers()
+  const maxNumber = users.reduce((maxValue, user) => {
+    const code = String(user.MaSinhVien || user.MaDinhDanh || '').trim().toUpperCase()
+    if (!code.startsWith(prefix)) return maxValue
+
+    const number = Number(code.slice(prefix.length).replace(/\D/g, ''))
+    return Number.isFinite(number) ? Math.max(maxValue, number) : maxValue
+  }, 0)
+
+  return `${prefix}${String(maxNumber + 1).padStart(3, '0')}`
+}
+
 function persistUsers(users) {
   const normalizedUsers = users.map(normalizeUser)
   writeJson(USERS_KEY, normalizedUsers)
@@ -153,6 +175,7 @@ export function createAccountUser(payload) {
     VaiTroID: Number(payload.VaiTroID || 4),
     TrangThai: Number(payload.TrangThai ?? 1),
     MaSinhVien: String(payload.MaSinhVien || '').trim() || undefined,
+    MaDinhDanh: String(payload.MaDinhDanh || payload.MaSinhVien || '').trim() || undefined,
   })
 
   persistUsers([...users, nextUser])
@@ -190,6 +213,7 @@ export function updateAccountUser(userId, payload) {
     VaiTroID: Number(payload.VaiTroID || currentUser.VaiTroID),
     TrangThai: Number(payload.TrangThai ?? currentUser.TrangThai),
     MaSinhVien: String(payload.MaSinhVien || '').trim() || undefined,
+    MaDinhDanh: String(payload.MaDinhDanh || payload.MaSinhVien || '').trim() || undefined,
     MatKhauHash: payload.MatKhau ? normalizePasswordHash(payload.MatKhau) : currentUser.MatKhauHash,
   })
 
@@ -239,31 +263,31 @@ export function loginWithSeededAccount(payload) {
   }
 }
 
-async function authRequest(path, body) {
-  const response = await fetch(`${AUTH_API_BASE_URL}${path}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
+export function signupWithLocalAccount(payload) {
+  const roleId = Number(payload.VaiTroID || 4)
+  const code = String(payload.MaDinhDanh || payload.MaSinhVien || '').trim() || generateNextAccountCode(roleId)
+  const user = createAccountUser({
+    HoTen: payload.HoTen,
+    Email: payload.Email,
+    MatKhau: payload.MatKhau,
+    VaiTroID: roleId,
+    TrangThai: 1,
+    MaSinhVien: roleId === 4 ? code : undefined,
+    MaDinhDanh: code,
   })
 
-  let data = null
-  const text = await response.text()
-
-  if (text) {
-    try {
-      data = JSON.parse(text)
-    } catch {
-      data = { message: text }
-    }
+  return {
+    token: `local-signup-${user.NguoiDungID}-${user.TenVaiTro}`,
+    user,
+    generatedCode: code,
+    authSource: 'local-sql-demo-signup',
   }
+}
 
-  if (!response.ok) {
-    throw new Error(data?.error || data?.message || `Auth request failed: ${response.status}`)
-  }
-
-  return data
+async function authRequest(path, body) {
+  if (path === '/login') return examEndpoints.login(body)
+  if (path === '/signup') return examEndpoints.signup(body)
+  throw new Error(`Unknown auth route: ${path}`)
 }
 
 export function getAuthSession() {
@@ -299,7 +323,30 @@ export const authClient = {
       throw error
     }
   },
-  signup(payload) {
-    return authRequest('/signup', payload)
+  async signup(payload) {
+    try {
+      return await authRequest('/signup', payload)
+    } catch (error) {
+      if (error instanceof TypeError) {
+        return signupWithLocalAccount(payload)
+      }
+
+      throw error
+    }
+  },
+}
+
+export const accountClient = {
+  async listUsers() {
+    return await examEndpoints.getNguoiDung()
+  },
+  async createUser(payload) {
+    return await examEndpoints.createNguoiDung(payload)
+  },
+  async updateUser(userId, payload) {
+    return await examEndpoints.updateNguoiDung(userId, payload)
+  },
+  async deleteUser(userId) {
+    return await examEndpoints.deleteNguoiDung(userId)
   },
 }

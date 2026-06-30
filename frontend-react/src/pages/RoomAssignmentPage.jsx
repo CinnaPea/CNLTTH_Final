@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { rubyEndpoints } from '../api/rubyEndpoints'
+import { examEndpoints } from '../api/examEndpoints'
 import PageHeader from '../components/ui/PageHeader'
 
 const roomStatusMeta = {
@@ -92,9 +92,9 @@ function RoomAssignmentPage() {
 
     try {
       const [assignmentData, examData, roomData] = await Promise.all([
-        rubyEndpoints.getPhanPhong(),
-        rubyEndpoints.getKyThis(),
-        rubyEndpoints.getPhong(),
+        examEndpoints.getPhanPhong(),
+        examEndpoints.getKyThis(),
+        examEndpoints.getPhong(),
       ])
 
       const nextExams = Array.isArray(examData) ? examData : []
@@ -115,9 +115,9 @@ function RoomAssignmentPage() {
     async function loadInitialData() {
       try {
         const [assignmentData, examData, roomData] = await Promise.all([
-          rubyEndpoints.getPhanPhong(),
-          rubyEndpoints.getKyThis(),
-          rubyEndpoints.getPhong(),
+          examEndpoints.getPhanPhong(),
+          examEndpoints.getKyThis(),
+          examEndpoints.getPhong(),
         ])
 
         if (!isMounted) return
@@ -149,7 +149,7 @@ function RoomAssignmentPage() {
     setNotice('')
 
     try {
-      const result = await rubyEndpoints.autoPhanPhong(selectedExamId)
+      const result = await examEndpoints.autoPhanPhong(selectedExamId)
       setNotice(result?.message || 'Da chay phan phong tu dong.')
       await loadData()
     } catch (runError) {
@@ -167,7 +167,7 @@ function RoomAssignmentPage() {
     setNotice('')
 
     try {
-      await rubyEndpoints.deletePhanPhong(assignment.PhanPhongID)
+      await examEndpoints.deletePhanPhong(assignment.PhanPhongID)
       setNotice('Da xoa phan phong.')
       await loadData()
     } catch (deleteError) {

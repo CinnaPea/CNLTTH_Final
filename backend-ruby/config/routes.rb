@@ -8,6 +8,10 @@ Rails.application.routes.draw do
   namespace :api do
     namespace :v1 do
       get "health", to: "health#index"
+      post "auth/login", to: "auth#login"
+      post "auth/signup", to: "auth#signup"
+      resources :vai_tro, only: [:index]
+      resources :nguoi_dung, only: [:index, :show, :create, :update, :destroy]
       resources :mon_thi, only: [:index, :show, :create, :update, :destroy]
       resources :sinh_vien, only: [:index, :show, :create, :update, :destroy]
       resources :phong_thi, only: [:index, :show, :create, :update, :destroy] 

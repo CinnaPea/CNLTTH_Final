@@ -1,48 +1,91 @@
 import { useState } from 'react'
-import { authClient } from '../api/authClient'
+import { authClient, generateNextAccountCode } from '../api/authClient'
 
-function InputShell({ icon, name, onChange, placeholder, type = 'text', value }) {
+const signupRoles = [
+  { value: '4', label: 'Sinh vien' },
+  { value: '2', label: 'Can bo dao tao' },
+  { value: '3', label: 'Can bo khao thi' },
+]
+
+function InputShell({
+  icon,
+  name,
+  onChange,
+  onTogglePassword,
+  placeholder,
+  readOnly = false,
+  showPassword = false,
+  type = 'text',
+  value,
+}) {
+  const isPassword = type === 'password'
+
   return (
     <label className="form-field form-field--compact">
       <span>{icon}</span>
       <input
-        autoComplete={type === 'password' ? 'new-password' : name}
+        autoComplete={isPassword ? 'new-password' : name}
         name={name}
         onChange={onChange}
         placeholder={placeholder}
+        readOnly={readOnly}
         required
-        type={type}
+        type={isPassword && showPassword ? 'text' : type}
         value={value}
       />
+      {isPassword ? (
+        <button
+          aria-label={showPassword ? 'Hide password' : 'Show password'}
+          className="password-toggle"
+          onClick={onTogglePassword}
+          type="button"
+        >
+          {showPassword ? 'Hide' : 'Show'}
+        </button>
+      ) : null}
+    </label>
+  )
+}
+
+function SelectShell({ icon, name, onChange, value }) {
+  return (
+    <label className="form-field form-field--compact">
+      <span>{icon}</span>
+      <select name={name} onChange={onChange} value={value}>
+        {signupRoles.map((role) => (
+          <option key={role.value} value={role.value}>
+            {role.label}
+          </option>
+        ))}
+      </select>
     </label>
   )
 }
 
 function getFriendlyError(error) {
-  if (error instanceof TypeError) {
-    return 'Không kết nối được dịch vụ đăng ký SQL. Kiểm tra VITE_AUTH_API_BASE_URL hoặc server auth.'
-  }
-
-  return error?.message || 'Đăng ký thất bại. Vui lòng thử lại.'
+  return error?.message || 'Dang ky that bai. Vui long thu lai.'
 }
 
 function SignupPage() {
   const [form, setForm] = useState({
     fullName: '',
     email: '',
-    code: '',
+    roleId: '4',
+    code: generateNextAccountCode(4),
     password: '',
     acceptedTerms: false,
   })
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   function updateForm(event) {
     const { checked, name, type, value } = event.target
     setForm((current) => ({
       ...current,
       [name]: type === 'checkbox' ? checked : value,
+      ...(name === 'roleId' ? { code: generateNextAccountCode(Number(value)) } : {}),
     }))
   }
 
@@ -52,24 +95,30 @@ function SignupPage() {
     setNotice('')
 
     if (!form.acceptedTerms) {
-      setError('Bạn cần đồng ý với điều khoản sử dụng trước khi tạo tài khoản.')
+      setError('Ban can dong y voi dieu khoan su dung truoc khi tao tai khoan.')
       return
     }
 
     setIsSubmitting(true)
 
     try {
-      await authClient.signup({
+      const result = await authClient.signup({
         HoTen: form.fullName.trim(),
         Email: form.email.trim(),
         MaDinhDanh: form.code.trim(),
+        MaSinhVien: form.roleId === '4' ? form.code.trim() : undefined,
+        VaiTroID: Number(form.roleId),
         MatKhau: form.password,
       })
 
-      setNotice('Tạo tài khoản thành công. Chuyển sang trang đăng nhập...')
+      const sourceNote = result?.authSource === 'local-sql-demo-signup'
+        ? ` Tao bang demo local voi ma ${result.generatedCode || form.code}.`
+        : ''
+
+      setNotice(`Tao tai khoan thanh cong.${sourceNote} Chuyen sang trang dang nhap...`)
       window.setTimeout(() => {
         window.location.hash = '#login'
-      }, 700)
+      }, 900)
     } catch (signupError) {
       setError(getFriendlyError(signupError))
     } finally {
@@ -82,10 +131,10 @@ function SignupPage() {
       <div className="auth-container auth-container--compact">
         <div className="auth-page__nav">
           <a className="button button--glass" href="#top">
-            ← Về landing page
+            Back to landing page
           </a>
           <a className="auth-page__link" href="#login">
-            Đã có tài khoản?
+            Da co tai khoan?
           </a>
         </div>
 
@@ -95,8 +144,8 @@ function SignupPage() {
               <div className="auth-visual__pattern" />
               <div className="auth-visual__copy auth-visual__copy--center">
                 <p className="eyebrow">Get Started</p>
-                <h1>Bắt đầu</h1>
-                <p>Đã có tài khoản? Đăng nhập để tiếp tục vào khu vực điều hành kỳ thi.</p>
+                <h1>Bat dau</h1>
+                <p>Da co tai khoan? Dang nhap de tiep tuc vao khu vuc dieu hanh ky thi.</p>
                 <a className="button button--outline" href="#login">
                   Log in
                 </a>
@@ -108,39 +157,48 @@ function SignupPage() {
                 <div className="auth-form__heading">
                   <div>
                     <p className="eyebrow">Sign up</p>
-                    <h2>Tạo tài khoản</h2>
+                    <h2>Tao tai khoan</h2>
                   </div>
                   <span>Need help?</span>
                 </div>
 
                 <div className="auth-fields auth-fields--compact">
                   <InputShell
-                    icon="👤"
+                    icon="@"
                     name="fullName"
                     onChange={updateForm}
-                    placeholder="Họ và tên"
+                    placeholder="Ho va ten"
                     value={form.fullName}
                   />
                   <InputShell
-                    icon="✉️"
+                    icon="mail"
                     name="email"
                     onChange={updateForm}
                     placeholder="Email"
                     type="email"
                     value={form.email}
                   />
-                  <InputShell
-                    icon="🏫"
-                    name="code"
+                  <SelectShell
+                    icon="role"
+                    name="roleId"
                     onChange={updateForm}
-                    placeholder="Mã sinh viên / mã cán bộ"
+                    value={form.roleId}
+                  />
+                  <InputShell
+                    icon="id"
+                    name="code"
+                    onChange={() => {}}
+                    placeholder="Ma sinh vien / ma can bo"
+                    readOnly
                     value={form.code}
                   />
                   <InputShell
-                    icon="🔒"
+                    icon="lock"
                     name="password"
                     onChange={updateForm}
-                    placeholder="Mật khẩu"
+                    onTogglePassword={() => setShowPassword((current) => !current)}
+                    placeholder="Mat khau"
+                    showPassword={showPassword}
                     type="password"
                     value={form.password}
                   />
@@ -153,21 +211,21 @@ function SignupPage() {
                     onChange={updateForm}
                     type="checkbox"
                   />
-                  <span>Tôi đồng ý với điều khoản sử dụng và chính sách bảo mật của hệ thống.</span>
+                  <span>Toi dong y voi dieu khoan su dung va chinh sach bao mat cua he thong.</span>
                 </label>
 
                 {error && <p className="auth-message auth-message--error">{error}</p>}
                 {notice && <p className="auth-message auth-message--success">{notice}</p>}
 
                 <button className="button button--signup" disabled={isSubmitting} type="submit">
-                  {isSubmitting ? 'Đang tạo tài khoản...' : 'Sign up'}
+                  {isSubmitting ? 'Dang tao tai khoan...' : 'Sign up'}
                 </button>
 
                 <a className="auth-page__link auth-page__link--center" href="#login">
-                  Đã có tài khoản?
+                  Da co tai khoan?
                 </a>
 
-                <p className="auth-legal">SQL auth service • Không gọi Ruby/C#</p>
+                <p className="auth-legal">SQL auth service - fallback demo local neu service chua chay</p>
               </form>
             </div>
           </div>

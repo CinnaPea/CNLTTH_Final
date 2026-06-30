@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { rubyEndpoints } from '../api/rubyEndpoints'
+import { examEndpoints } from '../api/examEndpoints'
 import DataTable from '../components/ui/DataTable'
 import PageHeader from '../components/ui/PageHeader'
 
@@ -41,7 +41,7 @@ function SubjectsPage() {
     setError('')
 
     try {
-      const data = await rubyEndpoints.getMonThi()
+      const data = await examEndpoints.getMonThi()
       setSubjects(Array.isArray(data) ? data : [])
     } catch (loadError) {
       setError(getErrorMessage(loadError))
@@ -55,7 +55,7 @@ function SubjectsPage() {
 
     async function loadInitialSubjects() {
       try {
-        const data = await rubyEndpoints.getMonThi()
+        const data = await examEndpoints.getMonThi()
         if (isMounted) setSubjects(Array.isArray(data) ? data : [])
       } catch (loadError) {
         if (isMounted) setError(getErrorMessage(loadError))
@@ -107,10 +107,10 @@ function SubjectsPage() {
 
     try {
       if (editingSubject) {
-        await rubyEndpoints.updateMonThi(editingSubject.MonThiID, toPayload(form))
+        await examEndpoints.updateMonThi(editingSubject.MonThiID, toPayload(form))
         setNotice('Da cap nhat mon thi.')
       } else {
-        await rubyEndpoints.createMonThi(toPayload(form))
+        await examEndpoints.createMonThi(toPayload(form))
         setNotice('Da tao mon thi moi.')
       }
 
@@ -130,7 +130,7 @@ function SubjectsPage() {
     setNotice('')
 
     try {
-      await rubyEndpoints.deleteMonThi(subject.MonThiID)
+      await examEndpoints.deleteMonThi(subject.MonThiID)
       setNotice('Da xoa mon thi.')
       await loadSubjects()
     } catch (deleteError) {

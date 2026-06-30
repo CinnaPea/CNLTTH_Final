@@ -1,29 +1,41 @@
 import { useState } from 'react'
 import { authClient, saveAuthSession } from '../api/authClient'
 
-function InputShell({ icon, name, onChange, placeholder, type = 'text', value }) {
+function InputShell({ icon, name, onChange, onTogglePassword, placeholder, showPassword = false, type = 'text', value }) {
+  const isPassword = type === 'password'
+
   return (
     <label className="form-field">
       <span>{icon}</span>
       <input
-        autoComplete={type === 'password' ? 'current-password' : 'username'}
+        autoComplete={isPassword ? 'current-password' : 'username'}
         name={name}
         onChange={onChange}
         placeholder={placeholder}
         required
-        type={type}
+        type={isPassword && showPassword ? 'text' : type}
         value={value}
       />
+      {isPassword ? (
+        <button
+          aria-label={showPassword ? 'Hide password' : 'Show password'}
+          className="password-toggle"
+          onClick={onTogglePassword}
+          type="button"
+        >
+          {showPassword ? 'Hide' : 'Show'}
+        </button>
+      ) : null}
     </label>
   )
 }
 
 function getFriendlyError(error) {
   if (error instanceof TypeError) {
-    return 'Không kết nối được dịch vụ đăng nhập SQL và tài khoản không khớp dữ liệu seed.'
+    return 'Khong ket noi duoc dich vu dang nhap SQL va tai khoan khong khop du lieu seed.'
   }
 
-  return error?.message || 'Đăng nhập thất bại. Vui lòng thử lại.'
+  return error?.message || 'Dang nhap that bai. Vui long thu lai.'
 }
 
 function LoginPage() {
@@ -34,6 +46,7 @@ function LoginPage() {
   })
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   function updateForm(event) {
     const { checked, name, type, value } = event.target
@@ -69,10 +82,10 @@ function LoginPage() {
       <div className="auth-container">
         <div className="auth-page__nav">
           <a className="button button--glass" href="#top">
-            ← Về landing page
+            Back to landing page
           </a>
           <a className="auth-page__link" href="#signup">
-            Chưa có tài khoản?
+            Chua co tai khoan?
           </a>
         </div>
 
@@ -88,8 +101,8 @@ function LoginPage() {
               <div className="auth-visual__copy">
                 <h1>Welcome</h1>
                 <p>
-                  Đăng nhập để tiếp tục điều phối kỳ thi, theo dõi phân phòng,
-                  sơ đồ chỗ ngồi và cập nhật điểm danh trong cùng một hệ thống.
+                  Dang nhap de tiep tuc dieu phoi ky thi, theo doi phan phong, so do cho ngoi
+                  va cap nhat diem danh trong cung mot he thong.
                 </p>
               </div>
             </div>
@@ -97,25 +110,27 @@ function LoginPage() {
             <div className="auth-form-panel">
               <form className="auth-form" onSubmit={submitLogin}>
                 <p className="eyebrow">Login</p>
-                <h2>Chào mừng trở lại</h2>
+                <h2>Chao mung tro lai</h2>
                 <p>
-                  Đăng nhập để truy cập khu vực điều hành kỳ thi. Tài khoản của
-                  bạn sẽ được dùng để quản lý phân phòng, xếp chỗ và điểm danh.
+                  Dang nhap de truy cap khu vuc dieu hanh ky thi. Tai khoan cua ban se duoc
+                  dung de quan ly phan phong, xep cho va diem danh.
                 </p>
 
                 <div className="auth-fields">
                   <InputShell
-                    icon="👤"
+                    icon="@"
                     name="identifier"
                     onChange={updateForm}
-                    placeholder="Tên đăng nhập hoặc email"
+                    placeholder="Ten dang nhap hoac email"
                     value={form.identifier}
                   />
                   <InputShell
-                    icon="🔒"
+                    icon="lock"
                     name="password"
                     onChange={updateForm}
-                    placeholder="Mật khẩu"
+                    onTogglePassword={() => setShowPassword((current) => !current)}
+                    placeholder="Mat khau"
+                    showPassword={showPassword}
                     type="password"
                     value={form.password}
                   />
@@ -129,19 +144,19 @@ function LoginPage() {
                       onChange={updateForm}
                       type="checkbox"
                     />
-                    <span>Ghi nhớ đăng nhập</span>
+                    <span>Ghi nho dang nhap</span>
                   </label>
-                  <a href="#signup">Chưa có tài khoản?</a>
+                  <a href="#signup">Chua co tai khoan?</a>
                 </div>
 
                 {error && <p className="auth-message auth-message--error">{error}</p>}
 
                 <button className="button button--auth" disabled={isSubmitting} type="submit">
-                  {isSubmitting ? 'Đang đăng nhập...' : 'Đăng nhập'}
+                  {isSubmitting ? 'Dang dang nhap...' : 'Dang nhap'}
                 </button>
 
                 <div className="auth-service-note">
-                  Dùng service <code>VITE_AUTH_API_BASE_URL</code>. Nếu service chưa chạy, hệ thống dùng tài khoản seed SQL demo.
+                  Dung service <code>VITE_AUTH_API_BASE_URL</code>. Neu service chua chay, he thong dung tai khoan seed SQL demo.
                 </div>
               </form>
             </div>

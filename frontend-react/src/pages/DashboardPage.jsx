@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getAuthSession } from '../api/authClient'
-import { rubyEndpoints } from '../api/rubyEndpoints'
+import { BACKEND_PROVIDERS, checkAllBackendHealth, getActiveBackend, getLastFailover } from '../api/backendProvider'
+import { examEndpoints } from '../api/examEndpoints'
 import MetricCard from '../components/ui/MetricCard'
 import PageHeader from '../components/ui/PageHeader'
 import StatusBadge from '../components/ui/StatusBadge'
@@ -107,7 +108,65 @@ function getRegistrationExam(registration) {
   return registration.ky_thi || {}
 }
 
-function AdminDashboard({ dashboard, data }) {
+function downloadCsv(filename, rows) {
+  if (rows.length === 0) return
+
+  const headers = Object.keys(rows[0])
+  const csv = [
+    headers.join(','),
+    ...rows.map((row) => headers.map((header) => `"${String(row[header] ?? '').replaceAll('"', '""')}"`).join(',')),
+  ].join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function printHtml(title, body) {
+  const popup = window.open('', '_blank', 'width=980,height=720')
+  if (!popup) return
+
+  popup.document.write(`
+    <html>
+      <head>
+        <title>${title}</title>
+        <style>
+          body { font-family: Segoe UI, Arial, sans-serif; color: #0f172a; padding: 24px; }
+          h1 { margin: 0 0 12px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+          th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
+          .ticket { border: 2px solid #0f3f6f; border-radius: 16px; padding: 24px; }
+          .muted { color: #64748b; }
+        </style>
+      </head>
+      <body>${body}</body>
+    </html>
+  `)
+  popup.document.close()
+  popup.focus()
+  popup.print()
+}
+
+function AdminDashboard({ dashboard, data, backendStatus }) {
+  const activeBackend = getActiveBackend()
+  const lastFailover = getLastFailover()
+
+  function exportSystemSnapshot() {
+    downloadCsv('examflow-system-snapshot.csv', [
+      { area: 'Ky thi', count: data.exams.length },
+      { area: 'Mon thi', count: data.subjects.length },
+      { area: 'Thi sinh', count: data.students.length },
+      { area: 'Dang ky', count: data.registrations.length },
+      { area: 'Phong thi', count: data.rooms.length },
+      { area: 'Phan phong', count: data.assignments.length },
+      { area: 'Xep cho', count: data.seats.length },
+      { area: 'Diem danh', count: data.attendanceRows.length },
+    ])
+  }
+
   return (
     <>
       <section className="metrics-grid">
@@ -197,6 +256,38 @@ function AdminDashboard({ dashboard, data }) {
           </div>
         </article>
       </section>
+
+      <section className="admin-dashboard-grid admin-dashboard-grid--secondary">
+        <article className="panel-card">
+          <h2>Trang thai backend</h2>
+          <div className="backend-health-grid">
+            {Object.values(BACKEND_PROVIDERS).map((provider) => {
+              const health = backendStatus[provider.id]
+              const isActive = activeBackend === provider.id
+
+              return (
+                <div className={`backend-health-card ${health?.ok ? 'is-online' : 'is-offline'}`} key={provider.id}>
+                  <span>{isActive ? 'Dang dung' : 'Du phong'}</span>
+                  <strong>{provider.label}</strong>
+                  <p>{health?.ok ? `OK - ${health.data?.database || 'database'}` : health?.error || 'Chua kiem tra'}</p>
+                </div>
+              )
+            })}
+          </div>
+          <p className="panel-card__subcopy">
+            {lastFailover ? `Lan tu dong chuyen gan nhat: ${new Date(lastFailover.at).toLocaleString('vi-VN')}` : 'Chua co lan chuyen backend tu dong trong phien nay.'}
+          </p>
+        </article>
+
+        <article className="panel-card">
+          <h2>Xuat va nhat ky van hanh</h2>
+          <div className="dashboard-task-list">
+            <button onClick={exportSystemSnapshot} type="button"><strong>CSV</strong><span>Xuat anh chup so lieu he thong</span></button>
+            <a href="#account"><strong>{data.students.length + data.registrations.length}</strong><span>Kiem tra nguoi dung va du lieu thi sinh</span></a>
+            <a href="#attendance"><strong>{dashboard.attendanceCounts.absent || 0}</strong><span>Hang doi can ghi chu/audit sau diem danh</span></a>
+          </div>
+        </article>
+      </section>
     </>
   )
 }
@@ -219,6 +310,26 @@ function StudentDashboard({ data, user }) {
     : null
   const latestExam = latestRegistration ? getRegistrationExam(latestRegistration) : publishedExams[0]
   const room = latestSeat?.phong_thi || latestAttendance?.phong_thi || {}
+  const checkInCode = latestRegistration?.SoBaoDanh || student?.MaSinhVien || user.Email || 'NO-TICKET'
+  const upcomingRegistrations = studentRegistrations.filter((registration) => {
+    const exam = getRegistrationExam(registration)
+    return exam.NgayThi && new Date(exam.NgayThi) >= new Date(new Date().toDateString())
+  })
+
+  function printTicket() {
+    printHtml('Phieu du thi', `
+      <div class="ticket">
+        <p class="muted">ExamFlow - Phieu du thi</p>
+        <h1>${latestExam?.TenKyThi || 'Ky thi'}</h1>
+        <p><strong>Ho ten:</strong> ${student?.HoTen || user.HoTen || '-'}</p>
+        <p><strong>Ma sinh vien:</strong> ${student?.MaSinhVien || user.MaSinhVien || '-'}</p>
+        <p><strong>So bao danh:</strong> ${latestRegistration?.SoBaoDanh || '-'}</p>
+        <p><strong>Ngay thi:</strong> ${formatDate(latestExam?.NgayThi)}</p>
+        <p><strong>Phong:</strong> ${room.MaPhong || '-'} | <strong>Cho:</strong> ${latestSeat?.SoCho || '-'}</p>
+        <p><strong>Ma check-in:</strong> ${checkInCode}</p>
+      </div>
+    `)
+  }
 
   return (
     <>
@@ -231,6 +342,7 @@ function StudentDashboard({ data, user }) {
           </p>
           <div className="role-dashboard-actions">
             <a className="button button--navy button--compact" href="#account">Thong tin tai khoan</a>
+            <button className="button button--green button--compact" disabled={!latestRegistration} onClick={printTicket} type="button">In phieu du thi</button>
           </div>
         </div>
 
@@ -292,6 +404,45 @@ function StudentDashboard({ data, user }) {
               <div><dt>Diem danh</dt><dd>{latestAttendance ? attendanceLabels[latestAttendance.TrangThai] : 'Chua mo'}</dd></div>
             </dl>
           </div>
+          <div className="student-checkin-code" aria-label="Ma check-in">
+            <span>{checkInCode}</span>
+          </div>
+        </article>
+      </section>
+
+      <section className="admin-dashboard-grid admin-dashboard-grid--secondary">
+        <article className="panel-card">
+          <h2>Lich nhac thi</h2>
+          <div className="stack-list">
+            {upcomingRegistrations.length > 0 ? upcomingRegistrations.slice(0, 3).map((registration) => {
+              const exam = getRegistrationExam(registration)
+              const seat = studentSeats.find((item) => item.DangKyThiID === registration.DangKyThiID)
+
+              return (
+                <div className="exam-summary" key={registration.DangKyThiID}>
+                  <div>
+                    <div>
+                      <p>{formatDate(exam.NgayThi)}</p>
+                      <h3>{exam.TenKyThi || 'Ky thi'}</h3>
+                    </div>
+                    <StatusBadge>{seat ? 'Da co cho' : 'Cho xep cho'}</StatusBadge>
+                  </div>
+                  <p>{normalizeTime(exam.GioBatDau)} - {normalizeTime(exam.GioKetThuc)} | SBD {registration.SoBaoDanh || '-'}</p>
+                </div>
+              )
+            }) : (
+              <p className="empty-panel-copy">Chua co lich thi sap toi.</p>
+            )}
+          </div>
+        </article>
+
+        <article className="panel-card">
+          <h2>Lich su doc duoc</h2>
+          <div className="dashboard-task-list">
+            <a href="#dashboard"><strong>{studentRegistrations.length}</strong><span>Tong dang ky cua tai khoan</span></a>
+            <a href="#dashboard"><strong>{studentSeats.length}</strong><span>Luot da co cho ngoi</span></a>
+            <a href="#dashboard"><strong>{studentAttendance.length}</strong><span>Ban ghi diem danh da mo</span></a>
+          </div>
         </article>
       </section>
     </>
@@ -302,10 +453,25 @@ function TrainingDashboard({ data }) {
   const publishedExams = data.exams.filter((exam) => exam.TrangThai === 'published')
   const waitingRoomAssignment = data.exams.filter((exam) => exam.TrangThai === 'published').length
   const recentExams = [...data.exams].sort((a, b) => Number(b.KyThiID || 0) - Number(a.KyThiID || 0)).slice(0, 5)
+  const activeCapacity = data.rooms.filter((room) => room.TrangThai).reduce((sum, room) => sum + Number(room.SucChua || 0), 0)
   const registrationCountByExam = data.registrations.reduce((counts, registration) => {
     counts[registration.KyThiID] = (counts[registration.KyThiID] || 0) + 1
     return counts
   }, {})
+  const setupChecklist = recentExams.map((exam) => {
+    const registrations = registrationCountByExam[exam.KyThiID] || 0
+    const hasSchedule = Boolean(exam.NgayThi && exam.GioBatDau && exam.GioKetThuc)
+    const capacityOk = registrations <= activeCapacity
+    const ready = exam.TrangThai === 'published' && registrations > 0 && hasSchedule && capacityOk
+
+    return {
+      exam,
+      registrations,
+      hasSchedule,
+      capacityOk,
+      ready,
+    }
+  })
 
   return (
     <>
@@ -358,6 +524,37 @@ function TrainingDashboard({ data }) {
           </div>
         </article>
       </section>
+
+      <section className="admin-dashboard-grid admin-dashboard-grid--secondary">
+        <article className="panel-card">
+          <h2>Checklist ban giao khao thi</h2>
+          <div className="stack-list">
+            {setupChecklist.length > 0 ? setupChecklist.map((item) => (
+              <div className="workflow-check-row" key={item.exam.KyThiID}>
+                <div>
+                  <strong>{item.exam.MaKyThi || item.exam.KyThiID}</strong>
+                  <span>{item.registrations} dang ky / {activeCapacity} cho dang hoat dong</span>
+                </div>
+                <StatusBadge>{item.ready ? 'San sang ban giao' : 'Can bo sung'}</StatusBadge>
+                <p>
+                  {item.hasSchedule ? 'Da co lich thi' : 'Thieu lich thi'} - {item.capacityOk ? 'Du suc chua' : 'Vuot suc chua'} - {item.exam.TrangThai || 'draft'}
+                </p>
+              </div>
+            )) : (
+              <p className="empty-panel-copy">Chua co ky thi de lap checklist.</p>
+            )}
+          </div>
+        </article>
+
+        <article className="panel-card">
+          <h2>Nhap lieu hang loat</h2>
+          <div className="dashboard-task-list">
+            <a href="#candidates"><strong>CSV</strong><span>Mo danh sach thi sinh de nhap/xuat du lieu</span></a>
+            <a href="#registrations"><strong>CSV</strong><span>Mo dang ky thi de chuan bi import hang loat</span></a>
+            <a href="#exams"><strong>{setupChecklist.filter((item) => item.ready).length}</strong><span>Ky thi co the ban giao sang khao thi</span></a>
+          </div>
+        </article>
+      </section>
     </>
   )
 }
@@ -384,6 +581,32 @@ function TestingDashboard({ data }) {
     counts[row.TrangThai] = (counts[row.TrangThai] || 0) + 1
     return counts
   }, {})
+  const duplicateSeatKeys = examSeats.reduce((counts, seat) => {
+    const key = `${seat.PhongThiID || '-'}-${seat.SoCho || seat.Hang || '-'}-${seat.Cot || '-'}`
+    counts[key] = (counts[key] || 0) + 1
+    return counts
+  }, {})
+  const duplicateSeats = Object.values(duplicateSeatKeys).filter((count) => count > 1).length
+  const overCapacityRooms = rooms.filter((room) => {
+    const assigned = examAssignments.filter((assignment) => assignment.PhongThiID === room.PhongThiID).length
+    return Number(room.SucChua || 0) > 0 && assigned > Number(room.SucChua || 0)
+  })
+  const readyToFinalize = duplicateSeats === 0 && overCapacityRooms.length === 0 && examAssignments.length > 0 && examAssignments.length === examSeats.length
+
+  function printOperationsSheet() {
+    const rows = rooms.map((room) => {
+      const assigned = examAssignments.filter((assignment) => assignment.PhongThiID === room.PhongThiID).length
+      const seated = examSeats.filter((seat) => seat.PhongThiID === room.PhongThiID).length
+      const present = examAttendance.filter((row) => row.PhongThiID === room.PhongThiID && ['present', 'late'].includes(row.TrangThai)).length
+      return `<tr><td>${room.MaPhong || room.TenPhong}</td><td>${assigned}</td><td>${seated}</td><td>${present}</td></tr>`
+    }).join('')
+
+    printHtml('Bang dieu hanh phong thi', `
+      <h1>${selectedExam?.TenKyThi || 'Ky thi'}</h1>
+      <p class="muted">Bang tong hop phong, xep cho va diem danh</p>
+      <table><thead><tr><th>Phong</th><th>Phan phong</th><th>Xep cho</th><th>Co mat/tre</th></tr></thead><tbody>${rows}</tbody></table>
+    `)
+  }
 
   return (
     <>
@@ -396,6 +619,7 @@ function TestingDashboard({ data }) {
         <div className="role-dashboard-actions role-dashboard-actions--stacked">
           <a className="button button--green button--compact" href="#room-assignment">Phan phong</a>
           <a className="button button--navy button--compact" href="#seat-assignment">Xep cho</a>
+          <button className="button button--soft button--compact" disabled={!selectedExam} onClick={printOperationsSheet} type="button">In bang phong</button>
         </div>
       </section>
 
@@ -453,6 +677,33 @@ function TestingDashboard({ data }) {
           </div>
         </article>
       </section>
+
+      <section className="admin-dashboard-grid admin-dashboard-grid--secondary">
+        <article className="panel-card">
+          <h2>Kiem tra xung dot</h2>
+          <div className="dashboard-breakdown">
+            <div><span>Qua suc chua</span><strong>{overCapacityRooms.length}</strong></div>
+            <div><span>Trung cho</span><strong>{duplicateSeats}</strong></div>
+            <div><span>Chua xep cho</span><strong>{Math.max(examAssignments.length - examSeats.length, 0)}</strong></div>
+            <div><span>Khoa du lieu</span><strong>{readyToFinalize ? 'OK' : 'NO'}</strong></div>
+          </div>
+          <p className="panel-card__subcopy">
+            {readyToFinalize ? 'Du lieu da san sang de in va ban giao phong thi.' : 'Can xu ly het xung dot truoc khi chot danh sach.'}
+          </p>
+        </article>
+
+        <article className="panel-card">
+          <h2>Trang thai diem danh truc tiep</h2>
+          <div className="dashboard-breakdown">
+            {['present', 'late', 'absent', 'excused'].map((status) => (
+              <div key={status}>
+                <span>{attendanceLabels[status]}</span>
+                <strong>{attendanceCounts[status] || 0}</strong>
+              </div>
+            ))}
+          </div>
+        </article>
+      </section>
     </>
   )
 }
@@ -473,24 +724,29 @@ function DashboardPage() {
   })
   const [failures, setFailures] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+  const [backendStatus, setBackendStatus] = useState({})
 
   useEffect(() => {
     let isMounted = true
 
     async function loadDashboardData() {
-      const results = await Promise.allSettled([
-        rubyEndpoints.getKyThis(),
-        rubyEndpoints.getPhong(),
-        rubyEndpoints.getSinhVien(),
-        rubyEndpoints.getDangKy(),
-        rubyEndpoints.getPhanPhong(),
-        rubyEndpoints.getDiemDanh(),
-        rubyEndpoints.getXepCho(),
-        rubyEndpoints.getMonThi(),
+      const [healthResults, results] = await Promise.all([
+        checkAllBackendHealth(),
+        Promise.allSettled([
+        examEndpoints.getKyThis(),
+        examEndpoints.getPhong(),
+        examEndpoints.getSinhVien(),
+        examEndpoints.getDangKy(),
+        examEndpoints.getPhanPhong(),
+        examEndpoints.getDiemDanh(),
+        examEndpoints.getXepCho(),
+        examEndpoints.getMonThi(),
+        ]),
       ])
 
       if (!isMounted) return
 
+      setBackendStatus(healthResults)
       setData({
         exams: asArray(results[0]),
         rooms: asArray(results[1]),
@@ -568,7 +824,7 @@ function DashboardPage() {
     if (roleName === 'SinhVien') return <StudentDashboard data={data} user={user} />
     if (roleName === 'CanBoDaoTao') return <TrainingDashboard data={data} />
     if (roleName === 'CanBoKhaoThi') return <TestingDashboard data={data} />
-    return <AdminDashboard dashboard={dashboard} data={data} />
+    return <AdminDashboard backendStatus={backendStatus} dashboard={dashboard} data={data} />
   }
 
   return (

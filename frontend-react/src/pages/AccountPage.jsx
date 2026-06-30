@@ -1,12 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
+  accountClient,
   clearAuthSession,
-  createAccountUser,
-  deleteAccountUser,
   getAccountRoles,
   getAccountUsers,
   getAuthSession,
-  updateAccountUser,
 } from '../api/authClient'
 import DataTable from '../components/ui/DataTable'
 import PageHeader from '../components/ui/PageHeader'
@@ -120,6 +118,7 @@ function AccountPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
+  const [isLoading, setIsLoading] = useState(isAdmin)
 
   const activeCount = useMemo(
     () => users.filter((user) => Number(user.TrangThai) === 1).length,
@@ -159,32 +158,59 @@ function AccountPage() {
     setIsModalOpen(true)
   }
 
-  function refreshUsers() {
-    setUsers(getAccountUsers())
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadUsers() {
+      if (!isAdmin) return
+      setIsLoading(true)
+      setError('')
+
+      try {
+        const data = await accountClient.listUsers()
+        if (isMounted) setUsers(Array.isArray(data) ? data : [])
+      } catch (loadError) {
+        if (isMounted) {
+          setError(loadError?.message || 'Khong the tai danh sach tai khoan tu backend.')
+        }
+      } finally {
+        if (isMounted) setIsLoading(false)
+      }
+    }
+
+    loadUsers()
+    return () => {
+      isMounted = false
+    }
+  }, [isAdmin])
+
+  async function refreshUsers() {
+    const data = await accountClient.listUsers()
+    setUsers(Array.isArray(data) ? data : [])
   }
 
-  function submitForm(event) {
+  async function submitForm(event) {
     event.preventDefault()
     setError('')
     setNotice('')
 
     try {
       if (editingUser) {
-        updateAccountUser(editingUser.NguoiDungID, form)
+        await accountClient.updateUser(editingUser.NguoiDungID, form)
         setNotice('Da cap nhat tai khoan.')
       } else {
-        createAccountUser(form)
+        await accountClient.createUser(form)
         setNotice('Da tao tai khoan moi.')
       }
 
       closeModal()
-      refreshUsers()
+      await refreshUsers()
     } catch (saveError) {
       setError(saveError?.message || 'Khong the luu tai khoan.')
     }
   }
 
-  function removeUser(user) {
+  async function removeUser(user) {
     const confirmed = window.confirm(`Xoa tai khoan ${user.Email}?`)
     if (!confirmed) return
 
@@ -192,9 +218,9 @@ function AccountPage() {
     setNotice('')
 
     try {
-      deleteAccountUser(user.NguoiDungID)
+      await accountClient.deleteUser(user.NguoiDungID)
       setNotice('Da xoa tai khoan.')
-      refreshUsers()
+      await refreshUsers()
     } catch (deleteError) {
       setError(deleteError?.message || 'Khong the xoa tai khoan.')
     }
@@ -331,7 +357,7 @@ function AccountPage() {
       <PageHeader
         eyebrow="Admin"
         title="Quan ly tai khoan"
-        description="Danh sach tai khoan dang bam theo du lieu NguoiDung/VaiTro tu SQL mau. Ruby va C# chua xu ly phan xac thuc."
+        description="Danh sach tai khoan lay tu NguoiDung/VaiTro qua Ruby hoac C# tuy backend dang hoat dong."
         action={(
           <div className="page-header__actions">
             <button className="button button--navy button--compact" onClick={openCreateModal} type="button">
@@ -379,7 +405,7 @@ function AccountPage() {
         </div>
 
         {isListVisible ? (
-          <DataTable columns={columns} rows={rows} />
+          isLoading ? <div className="table-placeholder">Dang tai danh sach tai khoan tu backend...</div> : <DataTable columns={columns} rows={rows} />
         ) : (
           <div className="table-placeholder">Danh sach tai khoan dang duoc an.</div>
         )}

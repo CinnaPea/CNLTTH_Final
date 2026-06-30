@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { rubyEndpoints } from '../api/rubyEndpoints'
+import { examEndpoints } from '../api/examEndpoints'
 import DataTable from '../components/ui/DataTable'
 import PageHeader from '../components/ui/PageHeader'
 import StatusBadge from '../components/ui/StatusBadge'
@@ -131,8 +131,8 @@ function ExamsPage() {
 
     try {
       const [examData, subjectData] = await Promise.all([
-        rubyEndpoints.getKyThis(),
-        rubyEndpoints.getMonThi(),
+        examEndpoints.getKyThis(),
+        examEndpoints.getMonThi(),
       ])
 
       setExams(Array.isArray(examData) ? examData : [])
@@ -150,8 +150,8 @@ function ExamsPage() {
     async function loadInitialData() {
       try {
         const [examData, subjectData] = await Promise.all([
-          rubyEndpoints.getKyThis(),
-          rubyEndpoints.getMonThi(),
+          examEndpoints.getKyThis(),
+          examEndpoints.getMonThi(),
         ])
 
         if (!isMounted) return
@@ -214,10 +214,10 @@ function ExamsPage() {
       const payload = toPayload(form)
 
       if (editingExam) {
-        await rubyEndpoints.updateKyThi(editingExam.KyThiID, payload)
+        await examEndpoints.updateKyThi(editingExam.KyThiID, payload)
         setNotice('Da cap nhat ky thi.')
       } else {
-        await rubyEndpoints.createKyThi(payload)
+        await examEndpoints.createKyThi(payload)
         setNotice('Da tao ky thi moi.')
       }
 
@@ -238,17 +238,17 @@ function ExamsPage() {
 
     try {
       if (action === 'publish') {
-        await rubyEndpoints.publishKyThi(exam.KyThiID)
+        await examEndpoints.publishKyThi(exam.KyThiID)
         setNotice('Da cong bo ky thi.')
       }
 
       if (action === 'close') {
-        await rubyEndpoints.closeKyThi(exam.KyThiID)
+        await examEndpoints.closeKyThi(exam.KyThiID)
         setNotice('Da dong ky thi.')
       }
 
       if (action === 'delete') {
-        await rubyEndpoints.deleteKyThi(exam.KyThiID)
+        await examEndpoints.deleteKyThi(exam.KyThiID)
         setNotice('Da xoa ky thi.')
       }
 

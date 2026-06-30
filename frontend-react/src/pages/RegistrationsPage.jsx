@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { rubyEndpoints } from '../api/rubyEndpoints'
+import { examEndpoints } from '../api/examEndpoints'
 import DataTable from '../components/ui/DataTable'
 import PageHeader from '../components/ui/PageHeader'
 import StatusBadge from '../components/ui/StatusBadge'
@@ -69,9 +69,9 @@ function RegistrationsPage() {
 
     try {
       const [registrationData, examData, studentData] = await Promise.all([
-        rubyEndpoints.getDangKy(),
-        rubyEndpoints.getKyThis(),
-        rubyEndpoints.getSinhVien(),
+        examEndpoints.getDangKy(),
+        examEndpoints.getKyThis(),
+        examEndpoints.getSinhVien(),
       ])
 
       setRegistrations(Array.isArray(registrationData) ? registrationData : [])
@@ -90,9 +90,9 @@ function RegistrationsPage() {
     async function loadInitialData() {
       try {
         const [registrationData, examData, studentData] = await Promise.all([
-          rubyEndpoints.getDangKy(),
-          rubyEndpoints.getKyThis(),
-          rubyEndpoints.getSinhVien(),
+          examEndpoints.getDangKy(),
+          examEndpoints.getKyThis(),
+          examEndpoints.getSinhVien(),
         ])
 
         if (!isMounted) return
@@ -153,10 +153,10 @@ function RegistrationsPage() {
 
     try {
       if (editingRegistration) {
-        await rubyEndpoints.updateDangKy(editingRegistration.DangKyThiID, toPayload(form))
+        await examEndpoints.updateDangKy(editingRegistration.DangKyThiID, toPayload(form))
         setNotice('Da cap nhat dang ky thi.')
       } else {
-        await rubyEndpoints.createDangKy(toPayload(form))
+        await examEndpoints.createDangKy(toPayload(form))
         setNotice('Da tao dang ky thi moi.')
       }
 
@@ -175,7 +175,7 @@ function RegistrationsPage() {
     setNotice('')
 
     try {
-      await rubyEndpoints.cancelDangKy(registration.DangKyThiID)
+      await examEndpoints.cancelDangKy(registration.DangKyThiID)
       setNotice('Da huy dang ky thi.')
       await loadData()
     } catch (cancelError) {
@@ -193,7 +193,7 @@ function RegistrationsPage() {
     setNotice('')
 
     try {
-      await rubyEndpoints.deleteDangKy(registration.DangKyThiID)
+      await examEndpoints.deleteDangKy(registration.DangKyThiID)
       setNotice('Da xoa dang ky thi.')
       await loadData()
     } catch (deleteError) {

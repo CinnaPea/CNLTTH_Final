@@ -1088,7 +1088,8 @@ ul {
   font-size: 1.1rem;
 }
 
-.form-field input {
+.form-field input,
+.form-field select {
   width: 100%;
   border: 0;
   background: transparent;
@@ -1096,8 +1097,38 @@ ul {
   outline: 0;
 }
 
+.form-field select {
+  cursor: pointer;
+}
+
+.form-field input[readonly] {
+  color: #0f3f6f;
+  cursor: default;
+  font-weight: 800;
+}
+
 .form-field input::placeholder {
   color: #94a3b8;
+}
+
+.password-toggle {
+  flex: 0 0 auto;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  background: #f8fbff;
+  padding: 6px 10px;
+  color: #075985;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.password-toggle:hover {
+  background: #eff6ff;
+}
+
+.password-toggle:focus-visible {
+  outline: 3px solid rgba(56, 189, 248, 0.28);
+  outline-offset: 2px;
 }
 
 .auth-options,
@@ -1489,6 +1520,59 @@ ul {
   background: #eff6ff;
 }
 
+.app-topbar__actions .backend-switcher {
+  display: inline-flex;
+  width: auto;
+  height: 44px;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(14, 116, 144, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 6px 10px;
+  color: #0f3f6f;
+  font-size: 0.86rem;
+  font-weight: 900;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.backend-switcher__dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #facc15;
+  box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.14);
+}
+
+.backend-switcher__dot.is-online {
+  background: #22c55e;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.14);
+}
+
+.backend-switcher__dot.is-offline {
+  background: #ef4444;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.14);
+}
+
+.backend-switcher select {
+  min-height: 30px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 999px;
+  background: #fff;
+  color: #0f3f6f;
+  font: inherit;
+  font-size: 0.82rem;
+  outline: none;
+  padding: 4px 10px;
+}
+
+.backend-switcher select:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.18);
+}
+
 .app-topbar__actions div {
   display: flex;
   width: 44px;
@@ -1746,7 +1830,8 @@ ul {
   margin-top: 16px;
 }
 
-.dashboard-task-list a {
+.dashboard-task-list a,
+.dashboard-task-list button {
   display: grid;
   grid-template-columns: 64px 1fr;
   gap: 12px;
@@ -1755,6 +1840,12 @@ ul {
   border-radius: 16px;
   background: #f8fbff;
   padding: 12px;
+  text-align: left;
+}
+
+.dashboard-task-list button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 
 .dashboard-task-list strong {
@@ -1877,6 +1968,110 @@ ul {
   color: #fff;
   font-size: 1rem;
   margin-top: 4px;
+}
+
+.backend-health-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.backend-health-card {
+  border: 1px solid #dbeafe;
+  border-radius: 18px;
+  background: #f8fbff;
+  padding: 16px;
+}
+
+.backend-health-card.is-online {
+  border-color: rgba(34, 197, 94, 0.28);
+  background: #f0fdf4;
+}
+
+.backend-health-card.is-offline {
+  border-color: rgba(239, 68, 68, 0.24);
+  background: #fff7ed;
+}
+
+.backend-health-card span {
+  display: inline-flex;
+  border-radius: 999px;
+  background: rgba(15, 63, 111, 0.08);
+  padding: 4px 9px;
+  color: #075985;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.backend-health-card strong {
+  display: block;
+  margin-top: 12px;
+  color: var(--navy);
+  font-size: 1.2rem;
+}
+
+.backend-health-card p {
+  margin-top: 6px;
+  color: #475569;
+  font-size: 0.9rem;
+}
+
+.workflow-check-row {
+  border: 1px solid #dbeafe;
+  border-radius: 16px;
+  background: #f8fbff;
+  padding: 14px;
+}
+
+.workflow-check-row > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workflow-check-row strong,
+.workflow-check-row span {
+  display: block;
+}
+
+.workflow-check-row strong {
+  color: var(--navy);
+}
+
+.workflow-check-row span {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.workflow-check-row .status-badge {
+  margin-top: 10px;
+}
+
+.workflow-check-row p {
+  margin-top: 10px;
+  color: #475569;
+}
+
+.student-checkin-code {
+  min-height: 72px;
+  margin-top: 16px;
+  border: 1px solid #dbeafe;
+  border-radius: 16px;
+  background:
+    repeating-linear-gradient(90deg, #0f3f6f 0 3px, transparent 3px 7px, #0f3f6f 7px 9px, transparent 9px 15px),
+    #fff;
+  padding: 14px;
+}
+
+.student-checkin-code span {
+  display: inline-flex;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 7px 12px;
+  color: var(--navy);
+  font-weight: 900;
 }
 
 .compact-info-panel {

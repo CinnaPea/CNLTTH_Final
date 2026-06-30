@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getAuthSession } from '../api/authClient'
-import { rubyEndpoints } from '../api/rubyEndpoints'
+import { examEndpoints } from '../api/examEndpoints'
 import PageHeader from '../components/ui/PageHeader'
 
 const attendanceLabels = {
@@ -127,9 +127,9 @@ function AttendancePage() {
 
     try {
       const [attendanceData, examData, seatData] = await Promise.all([
-        rubyEndpoints.getDiemDanh(),
-        rubyEndpoints.getKyThis(),
-        rubyEndpoints.getXepCho(),
+        examEndpoints.getDiemDanh(),
+        examEndpoints.getKyThis(),
+        examEndpoints.getXepCho(),
       ])
 
       const nextExams = Array.isArray(examData) ? examData : []
@@ -150,9 +150,9 @@ function AttendancePage() {
     async function loadInitialData() {
       try {
         const [attendanceData, examData, seatData] = await Promise.all([
-          rubyEndpoints.getDiemDanh(),
-          rubyEndpoints.getKyThis(),
-          rubyEndpoints.getXepCho(),
+          examEndpoints.getDiemDanh(),
+          examEndpoints.getKyThis(),
+          examEndpoints.getXepCho(),
         ])
 
         if (!isMounted) return
@@ -184,7 +184,7 @@ function AttendancePage() {
     setNotice('')
 
     try {
-      const result = await rubyEndpoints.openDiemDanh(selectedExamId, currentUserId)
+      const result = await examEndpoints.openDiemDanh(selectedExamId, currentUserId)
       setNotice(result?.message || 'Da mo diem danh.')
       await loadData()
     } catch (runError) {
@@ -200,7 +200,7 @@ function AttendancePage() {
     setNotice('')
 
     try {
-      await rubyEndpoints.updateDiemDanh(row.DiemDanhID, {
+      await examEndpoints.updateDiemDanh(row.DiemDanhID, {
         TrangThai: status,
         NguoiGhiNhanID: currentUserId,
       })

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { rubyEndpoints } from '../api/rubyEndpoints'
+import { examEndpoints } from '../api/examEndpoints'
 import PageHeader from '../components/ui/PageHeader'
 
 function getErrorMessage(error) {
@@ -110,10 +110,10 @@ function SeatAssignmentPage() {
 
     try {
       const [seatData, examData, assignmentData, roomData] = await Promise.all([
-        rubyEndpoints.getXepCho(),
-        rubyEndpoints.getKyThis(),
-        rubyEndpoints.getPhanPhong(),
-        rubyEndpoints.getPhong(),
+        examEndpoints.getXepCho(),
+        examEndpoints.getKyThis(),
+        examEndpoints.getPhanPhong(),
+        examEndpoints.getPhong(),
       ])
 
       const nextExams = Array.isArray(examData) ? examData : []
@@ -135,10 +135,10 @@ function SeatAssignmentPage() {
     async function loadInitialData() {
       try {
         const [seatData, examData, assignmentData, roomData] = await Promise.all([
-          rubyEndpoints.getXepCho(),
-          rubyEndpoints.getKyThis(),
-          rubyEndpoints.getPhanPhong(),
-          rubyEndpoints.getPhong(),
+          examEndpoints.getXepCho(),
+          examEndpoints.getKyThis(),
+          examEndpoints.getPhanPhong(),
+          examEndpoints.getPhong(),
         ])
 
         if (!isMounted) return
@@ -192,8 +192,8 @@ function SeatAssignmentPage() {
       if (currentSeat?.XepChoID) deleteIds.add(currentSeat.XepChoID)
       if (selectedExistingSeat?.XepChoID) deleteIds.add(selectedExistingSeat.XepChoID)
 
-      await Promise.all([...deleteIds].map((id) => rubyEndpoints.deleteXepCho(id)))
-      await rubyEndpoints.createXepCho({
+      await Promise.all([...deleteIds].map((id) => examEndpoints.deleteXepCho(id)))
+      await examEndpoints.createXepCho({
         DangKyThiID: Number(selectedRegistrationId),
         SoCho: getSeatCode(activeSeat.row, activeSeat.column),
         Hang: activeSeat.row,
@@ -218,7 +218,7 @@ function SeatAssignmentPage() {
     setNotice('')
 
     try {
-      await rubyEndpoints.deleteXepCho(activeSeat.seat.XepChoID)
+      await examEndpoints.deleteXepCho(activeSeat.seat.XepChoID)
       setNotice('Da xoa cho ngoi.')
       closeSeatModal()
       await loadData()

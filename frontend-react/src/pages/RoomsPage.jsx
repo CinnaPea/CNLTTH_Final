@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { rubyEndpoints } from '../api/rubyEndpoints'
+import { examEndpoints } from '../api/examEndpoints'
 import DataTable from '../components/ui/DataTable'
 import PageHeader from '../components/ui/PageHeader'
 import StatusBadge from '../components/ui/StatusBadge'
@@ -70,7 +70,7 @@ function RoomsPage() {
     setError('')
 
     try {
-      const data = await rubyEndpoints.getPhong()
+      const data = await examEndpoints.getPhong()
       setRooms(Array.isArray(data) ? data : [])
     } catch (loadError) {
       setError(getErrorMessage(loadError))
@@ -84,7 +84,7 @@ function RoomsPage() {
 
     async function loadInitialRooms() {
       try {
-        const data = await rubyEndpoints.getPhong()
+        const data = await examEndpoints.getPhong()
         if (isMounted) setRooms(Array.isArray(data) ? data : [])
       } catch (loadError) {
         if (isMounted) setError(getErrorMessage(loadError))
@@ -136,10 +136,10 @@ function RoomsPage() {
 
     try {
       if (editingRoom) {
-        await rubyEndpoints.updatePhong(editingRoom.PhongThiID, toPayload(form))
+        await examEndpoints.updatePhong(editingRoom.PhongThiID, toPayload(form))
         setNotice('Da cap nhat phong thi.')
       } else {
-        await rubyEndpoints.createPhong(toPayload(form))
+        await examEndpoints.createPhong(toPayload(form))
         setNotice('Da tao phong thi moi.')
       }
 
@@ -159,7 +159,7 @@ function RoomsPage() {
     setNotice('')
 
     try {
-      await rubyEndpoints.deletePhong(room.PhongThiID)
+      await examEndpoints.deletePhong(room.PhongThiID)
       setNotice('Da xoa phong thi.')
       await loadRooms()
     } catch (deleteError) {

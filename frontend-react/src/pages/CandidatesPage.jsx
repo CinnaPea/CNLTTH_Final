@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { rubyEndpoints } from '../api/rubyEndpoints'
+import { examEndpoints } from '../api/examEndpoints'
 import DataTable from '../components/ui/DataTable'
 import PageHeader from '../components/ui/PageHeader'
 import StatusBadge from '../components/ui/StatusBadge'
@@ -74,8 +74,8 @@ function CandidatesPage() {
 
     try {
       const [studentData, registrationData] = await Promise.all([
-        rubyEndpoints.getSinhVien(),
-        rubyEndpoints.getDangKy(),
+        examEndpoints.getSinhVien(),
+        examEndpoints.getDangKy(),
       ])
 
       setStudents(Array.isArray(studentData) ? studentData : [])
@@ -93,8 +93,8 @@ function CandidatesPage() {
     async function loadInitialData() {
       try {
         const [studentData, registrationData] = await Promise.all([
-          rubyEndpoints.getSinhVien(),
-          rubyEndpoints.getDangKy(),
+          examEndpoints.getSinhVien(),
+          examEndpoints.getDangKy(),
         ])
 
         if (!isMounted) return
@@ -150,10 +150,10 @@ function CandidatesPage() {
 
     try {
       if (editingStudent) {
-        await rubyEndpoints.updateSinhVien(editingStudent.SinhVienID, toPayload(form))
+        await examEndpoints.updateSinhVien(editingStudent.SinhVienID, toPayload(form))
         setNotice('Da cap nhat thi sinh.')
       } else {
-        await rubyEndpoints.createSinhVien(toPayload(form))
+        await examEndpoints.createSinhVien(toPayload(form))
         setNotice('Da tao thi sinh moi.')
       }
 
@@ -173,7 +173,7 @@ function CandidatesPage() {
     setNotice('')
 
     try {
-      await rubyEndpoints.deleteSinhVien(student.SinhVienID)
+      await examEndpoints.deleteSinhVien(student.SinhVienID)
       setNotice('Da xoa thi sinh.')
       await loadData()
     } catch (deleteError) {
