@@ -1,5 +1,5 @@
 import { getAuthSession } from '../../api/authClient'
-import { getRoleNavItems } from '../../data/operationsMockData'
+import { getRoleNavItems } from '../../data/roleAccess'
 import AppSidebar from './AppSidebar'
 import AppTopbar from './AppTopbar'
 

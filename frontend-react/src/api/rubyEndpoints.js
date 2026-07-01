@@ -2,6 +2,25 @@ import {
     rubyAPI
 } from "./client";
 
+function getSessionUserHeaders() {
+    try {
+        const session = JSON.parse(localStorage.getItem("examflow.auth.session") || "null");
+        const userId = session?.user?.NguoiDungID;
+        return userId ? { "X-User-Id": String(userId) } : {};
+    } catch {
+        return {};
+    }
+}
+
+function queryString(params) {
+    const query = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if(value !== undefined && value !== null && value !== "") query.set(key, value);
+    });
+    const text = query.toString();
+    return text ? `?${text}` : "";
+}
+
 export const rubyEndpoints = {
     health() {
         return rubyAPI.get("/health");
@@ -29,6 +48,12 @@ export const rubyEndpoints = {
     },
     getVaiTro() {
         return rubyAPI.get("/vai_tro");
+    },
+    getNhatKy(params = {}) {
+        return rubyAPI.get(`/nhat_ky${queryString(params)}`, { headers: getSessionUserHeaders() });
+    },
+    getNhatKyById(id) {
+        return rubyAPI.get(`/nhat_ky/${id}`, { headers: getSessionUserHeaders() });
     },
     getMonThi() {
         return rubyAPI.get("/mon_thi");
@@ -104,6 +129,9 @@ export const rubyEndpoints = {
     },
     getPhanPhong() {
         return rubyAPI.get("/phan_phong");
+    },
+    createPhanPhong(payload) {
+        return rubyAPI.post("/phan_phong", { phan_phong: payload });
     },
     deletePhanPhong(id) {
         return rubyAPI.delete(`/phan_phong/${id}`);

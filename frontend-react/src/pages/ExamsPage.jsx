@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { examEndpoints } from '../api/examEndpoints'
+import Dialog, { ConfirmDialog } from '../components/common/Dialog'
+import { Field, FormGrid, Input, Select, Textarea } from '../components/common/FormField'
+import { useToast } from '../components/common/Toast'
 import DataTable from '../components/ui/DataTable'
 import PageHeader from '../components/ui/PageHeader'
 import StatusBadge from '../components/ui/StatusBadge'
@@ -95,6 +98,7 @@ function makeExportRows(exams) {
 }
 
 function ExamsPage() {
+  const toast = useToast()
   const [exams, setExams] = useState([])
   const [subjects, setSubjects] = useState([])
   const [form, setForm] = useState(emptyForm)
@@ -103,6 +107,7 @@ function ExamsPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [isListVisible, setIsListVisible] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const [actionId, setActionId] = useState(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -216,15 +221,19 @@ function ExamsPage() {
       if (editingExam) {
         await examEndpoints.updateKyThi(editingExam.KyThiID, payload)
         setNotice('Da cap nhat ky thi.')
+        toast?.('Da cap nhat ky thi.', 'success')
       } else {
         await examEndpoints.createKyThi(payload)
         setNotice('Da tao ky thi moi.')
+        toast?.('Da tao ky thi moi.', 'success')
       }
 
       closeModal()
       await loadData()
     } catch (saveError) {
-      setError(getErrorMessage(saveError))
+      const message = getErrorMessage(saveError)
+      setError(message)
+      toast?.(message, 'error')
     } finally {
       setIsSaving(false)
     }
@@ -240,21 +249,27 @@ function ExamsPage() {
       if (action === 'publish') {
         await examEndpoints.publishKyThi(exam.KyThiID)
         setNotice('Da cong bo ky thi.')
+        toast?.('Da cong bo ky thi.', 'success')
       }
 
       if (action === 'close') {
         await examEndpoints.closeKyThi(exam.KyThiID)
         setNotice('Da dong ky thi.')
+        toast?.('Da dong ky thi.', 'success')
       }
 
       if (action === 'delete') {
         await examEndpoints.deleteKyThi(exam.KyThiID)
         setNotice('Da xoa ky thi.')
+        toast?.('Da xoa ky thi.', 'success')
+        setDeleteTarget(null)
       }
 
       await loadData()
     } catch (actionError) {
-      setError(getErrorMessage(actionError))
+      const message = getErrorMessage(actionError)
+      setError(message)
+      toast?.(message, 'error')
     } finally {
       setActionId(null)
     }
@@ -381,7 +396,7 @@ function ExamsPage() {
           <button
             className="table-action table-action--danger"
             disabled={actionId === `delete-${row.KyThiID}`}
-            onClick={() => runAction(row, 'delete')}
+            onClick={() => setDeleteTarget(row)}
             type="button"
           >
             Xoa
@@ -454,75 +469,75 @@ function ExamsPage() {
         )}
       </section>
 
-      {isModalOpen && (
-        <div className="exam-modal-backdrop" onClick={closeModal}>
-          <form
-            aria-label={editingExam ? 'Cap nhat ky thi' : 'Tao ky thi'}
-            className="exam-modal"
-            onClick={(event) => event.stopPropagation()}
-            onSubmit={submitForm}
-          >
-            <div className="exam-form__heading">
-              <div>
-                <p>{editingExam ? 'Cap nhat du lieu' : 'Tao du lieu moi'}</p>
-                <h2>{editingExam ? editingExam.TenKyThi : 'Ky thi moi'}</h2>
-              </div>
-              <button className="table-action" onClick={closeModal} type="button">
-                Dong
-              </button>
+      <Dialog
+        open={isModalOpen}
+        title={editingExam ? 'Cap nhat ky thi' : 'Tao ky thi'}
+        onClose={closeModal}
+        width={760}
+      >
+        <form
+          aria-label={editingExam ? 'Cap nhat ky thi' : 'Tao ky thi'}
+          className="exam-modal"
+          onSubmit={submitForm}
+        >
+          <div className="exam-form__heading">
+            <div>
+              <p>{editingExam ? 'Cap nhat du lieu' : 'Tao du lieu moi'}</p>
+              <h2>{editingExam ? editingExam.TenKyThi : 'Ky thi moi'}</h2>
             </div>
+          </div>
 
-            <div className="exam-form__grid">
-              <label>
-                <span>Ma ky thi</span>
-                <input name="MaKyThi" onChange={updateForm} required value={form.MaKyThi} />
-              </label>
-              <label>
-                <span>Ten ky thi</span>
-                <input name="TenKyThi" onChange={updateForm} required value={form.TenKyThi} />
-              </label>
-              <label>
-                <span>Mon thi</span>
-                <select name="MonThiID" onChange={updateForm} required value={form.MonThiID}>
-                  <option value="">Chon mon thi</option>
-                  {subjectOptions.map((subject) => (
-                    <option key={subject.id} value={subject.id}>{subject.label}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Ngay thi</span>
-                <input name="NgayThi" onChange={updateForm} required type="date" value={form.NgayThi} />
-              </label>
-              <label>
-                <span>Gio bat dau</span>
-                <input name="GioBatDau" onChange={updateForm} required type="time" value={form.GioBatDau} />
-              </label>
-              <label>
-                <span>Gio ket thuc</span>
-                <input name="GioKetThuc" onChange={updateForm} required type="time" value={form.GioKetThuc} />
-              </label>
-              <label>
-                <span>Han dang ky</span>
-                <input name="ThoiHanDangKyDen" onChange={updateForm} type="datetime-local" value={form.ThoiHanDangKyDen} />
-              </label>
-              <label className="exam-form__wide">
-                <span>Mo ta</span>
-                <textarea name="MoTa" onChange={updateForm} rows="3" value={form.MoTa} />
-              </label>
-            </div>
+          <FormGrid>
+            <Field label="Ma ky thi" required>
+              <Input name="MaKyThi" onChange={updateForm} required value={form.MaKyThi} />
+            </Field>
+            <Field label="Ten ky thi" required>
+              <Input name="TenKyThi" onChange={updateForm} required value={form.TenKyThi} />
+            </Field>
+            <Field label="Mon thi" required>
+              <Select name="MonThiID" onChange={updateForm} required value={form.MonThiID}>
+                <option value="">Chon mon thi</option>
+                {subjectOptions.map((subject) => (
+                  <option key={subject.id} value={subject.id}>{subject.label}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Ngay thi" required>
+              <Input name="NgayThi" onChange={updateForm} required type="date" value={form.NgayThi} />
+            </Field>
+            <Field label="Gio bat dau" required>
+              <Input name="GioBatDau" onChange={updateForm} required type="time" value={form.GioBatDau} />
+            </Field>
+            <Field label="Gio ket thuc" required>
+              <Input name="GioKetThuc" onChange={updateForm} required type="time" value={form.GioKetThuc} />
+            </Field>
+            <Field label="Han dang ky">
+              <Input name="ThoiHanDangKyDen" onChange={updateForm} type="datetime-local" value={form.ThoiHanDangKyDen} />
+            </Field>
+            <Field label="Mo ta">
+              <Textarea name="MoTa" onChange={updateForm} rows="3" value={form.MoTa} />
+            </Field>
+          </FormGrid>
 
-            <div className="exam-modal__footer">
-              <button className="button button--soft button--compact" onClick={closeModal} type="button">
-                Huy
-              </button>
-              <button className="button button--green button--compact" disabled={isSaving} type="submit">
-                {isSaving ? 'Dang luu...' : editingExam ? 'Luu thay doi' : 'Tao ky thi'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+          <div className="exam-modal__footer">
+            <button className="button button--soft button--compact" onClick={closeModal} type="button">
+              Huy
+            </button>
+            <button className="button button--green button--compact" disabled={isSaving} type="submit">
+              {isSaving ? 'Dang luu...' : editingExam ? 'Luu thay doi' : 'Tao ky thi'}
+            </button>
+          </div>
+        </form>
+      </Dialog>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Xoa ky thi"
+        message={`Xoa ky thi ${deleteTarget?.MaKyThi || deleteTarget?.TenKyThi || ''}?`}
+        confirmLabel="Xoa"
+        danger
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => runAction(deleteTarget, 'delete')}
+      />
     </>
   )
 }

@@ -11,6 +11,7 @@ Rails.application.routes.draw do
       post "auth/login", to: "auth#login"
       post "auth/signup", to: "auth#signup"
       resources :vai_tro, only: [:index]
+      resources :nhat_ky, only: [:index, :show]
       resources :nguoi_dung, only: [:index, :show, :create, :update, :destroy]
       resources :mon_thi, only: [:index, :show, :create, :update, :destroy]
       resources :sinh_vien, only: [:index, :show, :create, :update, :destroy]

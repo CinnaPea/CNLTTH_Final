@@ -6,6 +6,9 @@ import {
   getAccountUsers,
   getAuthSession,
 } from '../api/authClient'
+import Dialog, { ConfirmDialog } from '../components/common/Dialog'
+import { Field, FormGrid, Input, Select } from '../components/common/FormField'
+import { useToast } from '../components/common/Toast'
 import DataTable from '../components/ui/DataTable'
 import PageHeader from '../components/ui/PageHeader'
 import StatusBadge from '../components/ui/StatusBadge'
@@ -107,6 +110,7 @@ function AccountSummary({ session }) {
 }
 
 function AccountPage() {
+  const toast = useToast()
   const session = getAuthSession()
   const currentUser = session?.user || {}
   const isAdmin = currentUser.TenVaiTro === 'Admin'
@@ -116,6 +120,7 @@ function AccountPage() {
   const [editingUser, setEditingUser] = useState(null)
   const [isListVisible, setIsListVisible] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(isAdmin)
@@ -198,21 +203,24 @@ function AccountPage() {
       if (editingUser) {
         await accountClient.updateUser(editingUser.NguoiDungID, form)
         setNotice('Da cap nhat tai khoan.')
+        toast?.('Da cap nhat tai khoan.', 'success')
       } else {
         await accountClient.createUser(form)
         setNotice('Da tao tai khoan moi.')
+        toast?.('Da tao tai khoan moi.', 'success')
       }
 
       closeModal()
       await refreshUsers()
     } catch (saveError) {
-      setError(saveError?.message || 'Khong the luu tai khoan.')
+      const message = saveError?.message || 'Khong the luu tai khoan.'
+      setError(message)
+      toast?.(message, 'error')
     }
   }
 
   async function removeUser(user) {
-    const confirmed = window.confirm(`Xoa tai khoan ${user.Email}?`)
-    if (!confirmed) return
+    if (!user) return
 
     setError('')
     setNotice('')
@@ -220,9 +228,14 @@ function AccountPage() {
     try {
       await accountClient.deleteUser(user.NguoiDungID)
       setNotice('Da xoa tai khoan.')
+      toast?.('Da xoa tai khoan.', 'success')
       await refreshUsers()
     } catch (deleteError) {
-      setError(deleteError?.message || 'Khong the xoa tai khoan.')
+      const message = deleteError?.message || 'Khong the xoa tai khoan.'
+      setError(message)
+      toast?.(message, 'error')
+    } finally {
+      setDeleteTarget(null)
     }
   }
 
@@ -328,7 +341,7 @@ function AccountPage() {
           <button
             className="table-action table-action--danger"
             disabled={row.NguoiDungID === currentUser.NguoiDungID}
-            onClick={() => removeUser(row)}
+            onClick={() => setDeleteTarget(row)}
             type="button"
           >
             Xoa
@@ -411,78 +424,80 @@ function AccountPage() {
         )}
       </section>
 
-      {isModalOpen && (
-        <div className="account-modal-backdrop" onClick={closeModal}>
-          <form
-            aria-label={editingUser ? 'Cap nhat tai khoan' : 'Tao tai khoan'}
-            className="account-modal"
-            onClick={(event) => event.stopPropagation()}
-            onSubmit={submitForm}
-          >
-            <div className="account-form__heading">
-              <div>
-                <p>{editingUser ? 'Cap nhat tai khoan' : 'Tao tai khoan'}</p>
-                <h2>{editingUser ? editingUser.Email : 'Nguoi dung moi'}</h2>
-              </div>
-              <button className="table-action" onClick={closeModal} type="button">
-                Dong
-              </button>
+      <Dialog
+        open={isModalOpen}
+        title={editingUser ? 'Cap nhat tai khoan' : 'Tao tai khoan'}
+        onClose={closeModal}
+        width={760}
+      >
+        <form
+          aria-label={editingUser ? 'Cap nhat tai khoan' : 'Tao tai khoan'}
+          className="account-modal"
+          onSubmit={submitForm}
+        >
+          <div className="account-form__heading">
+            <div>
+              <p>{editingUser ? 'Cap nhat tai khoan' : 'Tao tai khoan'}</p>
+              <h2>{editingUser ? editingUser.Email : 'Nguoi dung moi'}</h2>
             </div>
+          </div>
 
-            <div className="account-form__grid">
-              <label>
-                <span>Email</span>
-                <input name="Email" onChange={updateForm} required type="email" value={form.Email} />
-              </label>
-              <label>
-                <span>Ho ten</span>
-                <input name="HoTen" onChange={updateForm} required value={form.HoTen} />
-              </label>
-              <label>
-                <span>Mat khau {editingUser ? '(de trong neu giu nguyen)' : ''}</span>
-                <input
-                  minLength="6"
-                  name="MatKhau"
-                  onChange={updateForm}
-                  required={!editingUser}
-                  type="password"
-                  value={form.MatKhau}
-                />
-              </label>
-              <label>
-                <span>Vai tro</span>
-                <select name="VaiTroID" onChange={updateForm} required value={form.VaiTroID}>
-                  {roles.map((role) => (
-                    <option key={role.VaiTroID} value={role.VaiTroID}>
-                      {getRoleLabel(role.TenVaiTro)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Trang thai</span>
-                <select name="TrangThai" onChange={updateForm} value={form.TrangThai}>
-                  <option value="1">Hoat dong</option>
-                  <option value="0">Tam khoa</option>
-                </select>
-              </label>
-              <label>
-                <span>Ma sinh vien</span>
-                <input name="MaSinhVien" onChange={updateForm} placeholder="Chi dung cho Sinh vien" value={form.MaSinhVien} />
-              </label>
-            </div>
+          <FormGrid>
+            <Field label="Email" required>
+              <Input name="Email" onChange={updateForm} required type="email" value={form.Email} />
+            </Field>
+            <Field label="Ho ten" required>
+              <Input name="HoTen" onChange={updateForm} required value={form.HoTen} />
+            </Field>
+            <Field label={`Mat khau ${editingUser ? '(de trong neu giu nguyen)' : ''}`} required={!editingUser}>
+              <Input
+                minLength="6"
+                name="MatKhau"
+                onChange={updateForm}
+                required={!editingUser}
+                type="password"
+                value={form.MatKhau}
+              />
+            </Field>
+            <Field label="Vai tro" required>
+              <Select name="VaiTroID" onChange={updateForm} required value={form.VaiTroID}>
+                {roles.map((role) => (
+                  <option key={role.VaiTroID} value={role.VaiTroID}>
+                    {getRoleLabel(role.TenVaiTro)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Trang thai">
+              <Select name="TrangThai" onChange={updateForm} value={form.TrangThai}>
+                <option value="1">Hoat dong</option>
+                <option value="0">Tam khoa</option>
+              </Select>
+            </Field>
+            <Field label="Ma sinh vien">
+              <Input name="MaSinhVien" onChange={updateForm} placeholder="Chi dung cho Sinh vien" value={form.MaSinhVien} />
+            </Field>
+          </FormGrid>
 
-            <div className="account-modal__footer">
-              <button className="button button--soft button--compact" onClick={closeModal} type="button">
-                Huy
-              </button>
-              <button className="button button--green button--compact" type="submit">
-                {editingUser ? 'Luu thay doi' : 'Tao tai khoan'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+          <div className="account-modal__footer">
+            <button className="button button--soft button--compact" onClick={closeModal} type="button">
+              Huy
+            </button>
+            <button className="button button--green button--compact" type="submit">
+              {editingUser ? 'Luu thay doi' : 'Tao tai khoan'}
+            </button>
+          </div>
+        </form>
+      </Dialog>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Xoa tai khoan"
+        message={`Xoa tai khoan ${deleteTarget?.Email || ''}?`}
+        confirmLabel="Xoa"
+        danger
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => removeUser(deleteTarget)}
+      />
     </>
   )
 }

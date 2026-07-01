@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { examEndpoints } from '../api/examEndpoints'
+import { ConfirmDialog } from '../components/common/Dialog'
 import DataTable from '../components/ui/DataTable'
 import PageHeader from '../components/ui/PageHeader'
 import StatusBadge from '../components/ui/StatusBadge'
@@ -48,6 +49,7 @@ function CandidatesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
 
@@ -167,7 +169,7 @@ function CandidatesPage() {
   }
 
   async function removeStudent(student) {
-    if (!window.confirm(`Xoa thi sinh ${student.MaSinhVien}?`)) return
+    if (!student) return
 
     setError('')
     setNotice('')
@@ -178,6 +180,8 @@ function CandidatesPage() {
       await loadData()
     } catch (deleteError) {
       setError(getErrorMessage(deleteError))
+    } finally {
+      setDeleteTarget(null)
     }
   }
 
@@ -209,7 +213,7 @@ function CandidatesPage() {
       render: (_, row) => (
         <div className="table-actions">
           <button className="table-action" onClick={() => editStudent(row)} type="button">Sua</button>
-          <button className="table-action table-action--danger" onClick={() => removeStudent(row)} type="button">Xoa</button>
+          <button className="table-action table-action--danger" onClick={() => setDeleteTarget(row)} type="button">Xoa</button>
         </div>
       ),
     },
@@ -306,6 +310,15 @@ function CandidatesPage() {
           </form>
         </div>
       )}
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Xoa thi sinh"
+        message={`Xoa thi sinh ${deleteTarget?.MaSinhVien || ''}?`}
+        confirmLabel="Xoa"
+        danger
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => removeStudent(deleteTarget)}
+      />
     </>
   )
 }

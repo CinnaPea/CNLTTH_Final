@@ -1,6 +1,6 @@
 # Project Progress Reference
 
-Last reviewed: 2026-06-29
+Last reviewed: 2026-07-01
 
 This file is the working project handoff note. It should stay aligned with the real implementation, especially because the project goal changed from a Ruby/C# responsibility split into a backend failover demo.
 
@@ -42,6 +42,7 @@ Completed or mostly completed:
 - The app can automatically switch to the other backend when the active backend fails health checks or an API request fails with a network/5xx error.
 - The Ruby-to-C# failover path has been live-tested successfully: Ruby was stopped, C# remained connected to SQL Server, and the Admin dashboard continued displaying the same workflow data.
 - SQL Server remains the shared database used by both backend implementations.
+- React now contains provider-tolerant normalization for the seating and attendance pages so Ruby/C# casing or include-shape differences are less likely to break the board UI.
 
 Not completed yet:
 
@@ -505,6 +506,9 @@ Current state:
 - Clicking a seat opens an overlay.
 - Overlay has a dropdown of students/registration records assigned to that room.
 - A seat can be assigned, changed, or cleared.
+- Drag/drop seating is available with a right-side unseated-student list.
+- Room-scoped auto-fill can place unseated students into empty seats.
+- Room-scoped reset can clear the selected room's seating list.
 - `Sinh so do` now acts as print/PDF output.
 - CSV export is available.
 
@@ -518,9 +522,8 @@ Future improvements:
 
 - Add seat conflict prevention at backend level.
 - Add lock/finalize seating plan.
-- Add drag/drop assignment.
 - Add visual room layout editor.
-- Add batch auto-fill by rules.
+- Add stronger backend batch/transaction endpoint for auto-fill/reset so multi-seat writes can be atomic.
 - Add better print stylesheet for official seating charts.
 
 ### Diem Danh
@@ -530,12 +533,16 @@ Current state:
 - Ruby-backed attendance board exists.
 - Exam and room filters exist.
 - Attendance list was redesigned into a seating/grid-like board.
+- Attendance now loads room metadata directly so the board renders the selected room's full capacity/layout, not only occupied seats.
+- Attendance can show seated students from `XepCho` before attendance records exist.
+- Clicking a preview seat can open attendance and then apply the next status, keeping XepCho -> DiemDanh aligned.
+- Attendance row IDs and registration IDs are normalized defensively for Ruby/C# response-shape differences.
 - Student tiles reflect four statuses:
   - Green: present
   - Red: absent
   - Blue: excused
   - Yellow: late
-- Clicking a tile cycles or updates the status through Ruby.
+- Clicking a tile cycles or updates the status through the neutral Ruby/C# provider.
 - `Mo diem danh` workflow is connected.
 
 Future improvements:
@@ -647,7 +654,22 @@ Known C# parity notes:
 - The frontend C# base URL default was corrected to `http://localhost:5014/api/v1`.
 - The frontend env variable name is now `VITE_CSHARP_API_BASE_URL`.
 - C# auth/account endpoints mirror the Ruby demo-grade contract.
+- C# Swagger/OpenAPI support is already wired through Swashbuckle in `backend-csharp/Program.cs` and `backend-csharp.csproj`.
+- A live C# Swagger export was generated to `backend-csharp/openapi-csharp.generated.json` on 2026-07-01. The root `openapi.yaml` remains the shared React-facing Ruby/C# contract and should be manually aligned against this generated C# output.
+- Ruby and C# both expose `GET /api/v1/xep_cho`, `POST /api/v1/xep_cho`, `DELETE /api/v1/xep_cho/:id`, `GET /api/v1/diem_danh`, `POST /api/v1/ky_thi/:id/open_diem_danh`, and `PATCH/PUT /api/v1/diem_danh/:id`.
+- The frontend currently treats seat changes as delete+create because both providers expose no dedicated `PATCH /xep_cho/:id` contract.
+- Recent UI fixes normalize `DiemDanhID`, `DangKyThiID`, and `PhongThiID` access in React because Ruby includes nested associations with snake-case association names while C# returns EF navigation properties with PascalCase names.
 - Full live endpoint-by-endpoint response-shape testing against SQL Server is still useful, but the critical failover path has now passed a real dashboard test.
+
+Ruby/C# consistency update on 2026-07-01:
+
+- The failover contract remains: Ruby is the default provider, C# is the backup provider, and both use the same SQL Server database.
+- Read and normal workflow navigation remain safe to demo through either backend.
+- Seating and attendance pages now avoid assuming a single provider response shape. They handle nested `DangKyThi`/`dang_ky_thi`, `SinhVien`/`sinh_vien`, and normalized ID fields.
+- `DiemDanh` now derives the visual room board from `/phong_thi` metadata when needed, so Ruby's slimmer nested room include and C#'s EF room object can both feed the same UI.
+- `XepCho` reset and auto-fill are implemented as frontend-orchestrated sequences over the existing shared create/delete contract. This is demo-usable, but a future backend batch endpoint would be safer for production.
+- Write failover remains intentionally guarded. Automatic retries across Ruby and C# are still blocked for mutating requests because repeated POST/PATCH/DELETE operations can duplicate or partially apply SQL changes without a shared idempotency table.
+- The highest remaining consistency task is not adding more frontend normalization; it is running contract tests against both live providers and recording exact response envelopes for every `/api/v1/...` endpoint.
 
 Recommended C# next checks:
 
@@ -796,6 +818,277 @@ Recommended next tests:
 
 ## Suggested Future Implementations
 
+## Teacher Review Preparation
+
+This section answers the expected review focus:
+
+> Em bao cac ban xem ky lai chuong trinh xay dung, cac thay chi hoi trong noi dung chuong trinh cua cac em thoi:
+> cac chuc nang co ban nhu trong bao cao;
+> tich hop cac cong nghe khac nhau;
+> review lai code, y nghia cua tung ham chuc nang, debug frontend/backend;
+> co the duoc yeu cau sua code de thuc hien tac vu don gian trong toi da 5 phut.
+
+### 1. Core features to explain from the report
+
+The current project should be presented as an exam-organization workflow system. The core features visible in the app are:
+
+- Landing page introducing the system and role-based access.
+- Login/signup flow with role-aware navigation.
+- Admin dashboard with SQL-backed metrics and backend status.
+- Account management through `NguoiDung` and `VaiTro`.
+- Subject management through `MonThi`.
+- Exam management through `KyThi`, including publish/close actions.
+- Student management through `SinhVien`.
+- Registration management through `DangKyThi`, including cancel.
+- Room management through `PhongThi`.
+- Room assignment through `PhanPhong`, including auto assignment.
+- Seat assignment through `XepCho`, including manual seat editing and print/export.
+- Attendance through `DiemDanh`, including status updates and opening attendance records.
+- Role-specific dashboards for:
+  - `Admin`
+  - `CanBoDaoTao`
+  - `CanBoKhaoThi`
+  - `SinhVien`
+
+Recommended demo order:
+
+1. Login as Admin.
+2. Show dashboard metrics and backend selector.
+3. Show `Ky thi`, `Phong thi`, `Thi sinh`, `Dang ky thi`.
+4. Run or explain `Phan phong`, `Xep cho`, and `Diem danh`.
+5. Stop Ruby and show C# continuing the dashboard/workflow.
+6. Login as a non-admin role to show role-specific dashboard boundaries.
+
+### 2. Technology integration to explain
+
+The project currently integrates more than two technologies:
+
+- React/Vite frontend:
+  - Main UI.
+  - Role-aware pages.
+  - Provider-neutral API layer.
+  - Backend selector and automatic failover behavior.
+
+- Ruby on Rails API:
+  - Default backend.
+  - Exposes `/api/v1/...` operational endpoints.
+  - Connects to SQL Server.
+  - Used as the primary provider in the demo.
+
+- C# ASP.NET Core API:
+  - Backup backend.
+  - Mirrors the same `/api/v1/...` endpoint contract.
+  - Connects to the same SQL Server database.
+  - Continues the workflow when Ruby is stopped.
+
+- SQL Server:
+  - Shared source of truth for both backends.
+  - Stores users, roles, exams, students, rooms, registrations, assignments, seating, and attendance.
+
+- Shared API contract:
+  - Root `openapi.yaml` documents the expected Ruby/C# API shape.
+
+Important explanation:
+
+- Ruby and C# are not separate feature owners anymore.
+- Ruby is the default backend.
+- C# is the backup backend.
+- Both backends expose the same endpoint family.
+- React calls a neutral provider layer, so the UI can switch providers without changing pages.
+- Health checks and request failures allow the UI to detect provider availability.
+
+### 3. Code review and debug preparation
+
+The team should be ready to explain the following files first.
+
+Frontend files:
+
+- `frontend-react/src/api/client.js`
+  - Defines Ruby and C# base URLs.
+  - Sends JSON requests.
+  - Adds `Idempotency-Key` for writes.
+  - Converts failed HTTP responses into JavaScript errors.
+
+- `frontend-react/src/api/backendProvider.js`
+  - Stores active backend.
+  - Performs health checks.
+  - Chooses fallback backend.
+  - Records why a backend switch happened.
+
+- `frontend-react/src/api/examEndpoints.js`
+  - Calls the active provider.
+  - Allows read-safe failover.
+  - Blocks automatic write replay to avoid duplicated SQL writes.
+
+- `frontend-react/src/api/rubyEndpoints.js`
+  - Maps UI functions to Ruby endpoint paths.
+
+- `frontend-react/src/api/csharpEndpoints.js`
+  - Maps UI functions to C# endpoint paths.
+
+- `frontend-react/src/api/authClient.js`
+  - Saves/clears session.
+  - Calls shared auth endpoints.
+  - Generates the next student code from backend `SinhVien` data.
+
+- `frontend-react/src/components/SignupPage.jsx`
+  - Shows signup form.
+  - Shows student code only for `SinhVien`.
+  - Calls signup API.
+
+- `frontend-react/src/pages/AccountPage.jsx`
+  - Admin account CRUD.
+  - Uses backend `NguoiDung` endpoints.
+
+- `frontend-react/src/pages/DashboardPage.jsx`
+  - Role-specific dashboards.
+  - Uses backend data to calculate metrics.
+
+- `frontend-react/src/pages/RoomAssignmentPage.jsx`
+  - `Phan phong` UI.
+  - Calls auto room assignment.
+
+- `frontend-react/src/pages/SeatAssignmentPage.jsx`
+  - `Xep cho` UI.
+  - Handles seat selection/change/export.
+
+- `frontend-react/src/pages/AttendancePage.jsx`
+  - `Diem danh` UI.
+  - Handles attendance status updates.
+
+Ruby backend files:
+
+- `backend-ruby/config/routes.rb`
+  - Lists all `/api/v1` routes.
+
+- `backend-ruby/app/controllers/api/v1/auth_controller.rb`
+  - Login/signup.
+  - Demo password check.
+  - Signup student-code handling.
+
+- `backend-ruby/app/controllers/api/v1/nguoi_dung_controller.rb`
+  - Account CRUD.
+
+- `backend-ruby/app/controllers/api/v1/ky_thi_controller.rb`
+  - Exam CRUD and publish/close.
+
+- `backend-ruby/app/controllers/api/v1/dang_ky_thi_controller.rb`
+  - Registration CRUD and cancel.
+
+- `backend-ruby/app/controllers/api/v1/workflow_controller.rb`
+  - Auto room assignment.
+  - Auto seat assignment.
+  - Open attendance.
+
+- `backend-ruby/app/controllers/api/v1/diem_danh_controller.rb`
+  - Attendance CRUD/update.
+
+C# backend files:
+
+- `backend-csharp/Program.cs`
+  - Registers controllers, CORS, Swagger, SQL Server DbContext.
+
+- `backend-csharp/Data/ExamDbContext.cs`
+  - Maps C# models to SQL Server tables and relationships.
+
+- `backend-csharp/Controllers/AuthController.cs`
+  - Login/signup mirror of Ruby.
+
+- `backend-csharp/Controllers/NguoiDungController.cs`
+  - Account CRUD mirror of Ruby.
+
+- `backend-csharp/Controllers/WorkflowController.cs`
+  - Auto room assignment, auto seating, open attendance mirror of Ruby.
+
+- `backend-csharp/Controllers/HealthController.cs`
+  - Checks API and SQL Server connectivity.
+
+Breakpoint/debug guidance:
+
+- Frontend:
+  - Put breakpoints before each `await examEndpoints...` call.
+  - Inspect request payload.
+  - Step into `examEndpoints.js` to see active backend and fallback behavior.
+  - Step into `client.js` to see final URL, method, headers, and JSON body.
+
+- Backend:
+  - Put breakpoints at the first line inside controller actions.
+  - Inspect `params` in Ruby or payload objects in C#.
+  - Put breakpoints before `save`, `update`, `destroy`, or `SaveChangesAsync`.
+  - Put breakpoints after SQL writes and before `render json` / `return Ok`.
+
+Recommended first debug examples:
+
+1. Login:
+   - Frontend: `LoginPage.jsx` submit handler.
+   - Provider: `examEndpoints.login`.
+   - Backend: Ruby/C# `AuthController`.
+
+2. Create account:
+   - Frontend: `AccountPage.jsx` submit handler.
+   - Provider: `examEndpoints.createNguoiDung`.
+   - Backend: Ruby/C# `NguoiDungController#create/Create`.
+
+3. Auto room assignment:
+   - Frontend: `RoomAssignmentPage.jsx`.
+   - Provider: `examEndpoints.autoPhanPhong`.
+   - Backend: Ruby/C# `WorkflowController`.
+
+4. Failover:
+   - Frontend: `backendProvider.js`, `examEndpoints.js`, `AppTopbar.jsx`.
+   - Backend: Ruby/C# `HealthController`.
+
+### 4. Likely 5-minute code change tasks
+
+These are realistic small changes that can be done quickly during review.
+
+Frontend tasks:
+
+- Change a button label, page title, or description.
+- Add one extra field to a table column.
+- Hide/show a field based on role, similar to signup code visibility.
+- Change a status color or label in CSS.
+- Add a new dashboard metric derived from existing arrays.
+- Change the default backend from Ruby to C# or vice versa.
+- Change failover text shown in the topbar.
+- Add a simple validation message before submitting a form.
+
+Ruby tasks:
+
+- Add a filter to an `index` endpoint.
+- Change sort order in an `index` endpoint.
+- Add one permitted parameter to a controller params method.
+- Change an error message.
+- Add one value to a JSON response.
+- Add a basic guard before `save` or `update`.
+
+C# tasks:
+
+- Add a filter to a controller `Index`.
+- Change `OrderBy`.
+- Add one property assignment in `Create` or `Update`.
+- Change a returned error message.
+- Add one field to the anonymous response object.
+- Add a small validation before `SaveChangesAsync`.
+
+Good 5-minute examples to rehearse:
+
+1. Add `Email` display to a frontend table.
+2. Change `Diem danh` status label from `present` to `Co mat`.
+3. Add `?ky_thi_id=` filtering to one backend list endpoint.
+4. Add a simple required-field check in `SignupPage.jsx`.
+5. Add one extra metric card on `DashboardPage.jsx`.
+
+Things to avoid during a 5-minute task:
+
+- Database schema migrations.
+- Real password hashing conversion.
+- Large endpoint rewrites.
+- Changing both Ruby and C# deeply unless the task is tiny and symmetric.
+- Refactoring CSS/layout globally.
+
+### Highest Priority
+
 ### Highest Priority
 
 - Create a shared OpenAPI spec or endpoint contract document.
@@ -900,3 +1193,92 @@ Immediate next implementation path:
 - Do not return to the older Ruby-writes/C#-reports split unless the project goal changes again.
 - Keep the current CSS direction unless a redesign is explicitly requested.
 - Keep backend behavior and endpoint contracts stable once C# starts mirroring Ruby.
+
+## Selective Partner Merge Pass - 2026-07-01
+
+Decision summary:
+
+- Partner `AuthContext.jsx`: not merged. The partner version uses React Router, axios, and `exam_user`; the current app uses hash navigation, `examflow.auth.session`, and the Ruby/C# failover-aware auth client.
+- Partner router/App structure: not merged. Replacing the app shell would disrupt the current landing/auth/dashboard/session/failover flow.
+- Partner `services/api.js`: not merged. Useful endpoint inventory was mined, but the current `examEndpoints` failover provider remains the source of truth.
+- Partner `PageLayout.jsx`: not used as shell replacement. Its fixed router layout conflicts with the current app shell, but its role/sidebar ideas remain reference material.
+- Partner `RolesPage.jsx`: deferred until Ruby and C# both expose role CRUD with matching request/response contracts.
+- Partner `StudentPage.jsx`: deferred until the SinhVien dashboard/registration workflow is mapped onto the current hash/session model.
+- BP01/BP02 UX ideas: continue mining selectively; do not directly replace current pages.
+
+Completed in this pass:
+
+- Added/adapted current-app page tests for:
+  - Dashboard
+  - Dang Ky Thi
+  - Phong Thi
+  - Sinh Vien / Thi Sinh
+  - Xep Cho
+- Expanded MSW mock handlers for current API endpoints used by those pages:
+  - `phong_thi` create/update/delete
+  - `sinh_vien` create/update/delete
+  - `nguoi_dung`
+  - `vai_tro`
+  - `xep_cho` create/delete
+  - `ky_thi/:id/auto_xep_cho`
+  - `nhat_ky` list/detail
+- Added service tests for:
+  - Safe read failover from Ruby to C#
+  - Blocked create/write failover to avoid duplicate SQL writes
+  - Automatic `Idempotency-Key` header on mutating requests
+
+Verification:
+
+- `npm run test`: 15 test files passed, 38 tests passed.
+- `npm run lint`: passed.
+- `npm run build`: passed.
+
+Next selective candidates:
+
+- Add page tests for Account, AuditLog, full Dashboard role variants, and App-level hash navigation.
+- Add service tests for each unsafe write category: create/update/delete/cancel/auto workflow.
+- Add Ruby/C# contract checks against the generated C# OpenAPI file and a hand-maintained Ruby contract.
+- Implement role CRUD only after both backends have parity.
+- Implement SinhVien dashboard only after deciding whether student users stay on landing-plus-dashboard or receive a dedicated app-shell section.
+
+## Partner Idea Adaptation Pass - 2026-07-01
+
+Adapted ideas from the remaining hard partner files without replacing the current architecture:
+
+- Added `src/data/roleAccess.js` as the role/access source of truth.
+  - Defines stable role ids/names.
+  - Normalizes role names from SQL/API/session data.
+  - Defines hash-route access per role.
+  - Provides role-filtered navigation items.
+- Updated the app shell to use the new role access matrix instead of keeping route permissions inside mock data.
+- Updated auth normalization to use the shared role definitions.
+- Added a collapsible sidebar inspired by the partner `PageLayout`, while keeping the current hash-router and failover session flow.
+- Improved the sidebar role/user block so role context is clearer during demos.
+- Added tests for:
+  - role normalization and access separation
+  - Ruby/C# endpoint wrapper parity
+  - shared failover facade coverage
+
+Verification after this pass:
+
+- `npm run test`: 16 test files passed, 43 tests passed.
+- `npm run lint`: passed.
+- `npm run build`: passed.
+
+## Workflow Alignment Note - 2026-07-01
+
+Current operational status:
+
+- `Xep Cho` is correctly showing room capacity, empty seats, assigned seats, and the unseated student list for the selected exam/room.
+- The reported `Diem Danh` mismatch was traced and corrected outside this code pass. The important workflow expectation is:
+  - `Dang Ky Thi` creates/holds exam registrations.
+  - `Phan Phong` assigns registered students into rooms.
+  - `Xep Cho` assigns those roomed students into concrete seats.
+  - `Diem Danh` should display students from the opened attendance records, or from the seated list once attendance is opened/generated for that exam.
+- For demo stability, always verify the selected `Ky thi` and `Phong` match across `Phan Phong`, `Xep Cho`, and `Diem Danh` before presenting the workflow.
+
+Follow-up guardrails:
+
+- If `Xep Cho` shows students but `Diem Danh` does not, first check whether attendance has been opened/generated for that same `KyThiID` and `PhongThiID`.
+- Keep the current fallback behavior in mind: the UI can preview/derive from seating data, but real status updates require a `DiemDanhID`.
+- A future improvement is to add a visible hint in `Diem Danh` when seats exist but attendance records have not been generated yet.

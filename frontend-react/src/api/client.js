@@ -52,8 +52,8 @@ async function req(baseURL, path, options = {}) {
 }
 
 export const rubyAPI = {
-    get(path) {
-        return req(RUBY_API_BASE_URL, path);
+    get(path, options = {}) {
+        return req(RUBY_API_BASE_URL, path, options);
     },
     post(path, body) {
         return req(RUBY_API_BASE_URL, path, { method: "POST", body });
@@ -67,8 +67,8 @@ export const rubyAPI = {
 };
 
 export const csharpAPI = {
-    get(path) {
-        return req(CSHARP_API_BASE_URL, path);
+    get(path, options = {}) {
+        return req(CSHARP_API_BASE_URL, path, options);
     },
     post(path, body) {
         return req(CSHARP_API_BASE_URL, path, { method: "POST", body });

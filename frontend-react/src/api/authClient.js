@@ -1,14 +1,10 @@
 import { examEndpoints } from './examEndpoints'
+import { getRoleDefinition, ROLE_DEFINITIONS, ROLE_IDS } from '../data/roleAccess'
 
 const SESSION_KEY = 'examflow.auth.session'
 const USERS_KEY = 'examflow.auth.users'
 
-export const authRoles = [
-  { VaiTroID: 1, TenVaiTro: 'Admin' },
-  { VaiTroID: 2, TenVaiTro: 'CanBoDaoTao' },
-  { VaiTroID: 3, TenVaiTro: 'CanBoKhaoThi' },
-  { VaiTroID: 4, TenVaiTro: 'SinhVien' },
-]
+export const authRoles = ROLE_DEFINITIONS.map(({ VaiTroID, TenVaiTro }) => ({ VaiTroID, TenVaiTro }))
 
 const seededAccounts = [
   {
@@ -92,16 +88,12 @@ function removeJson(key) {
   localStorage.removeItem(key)
 }
 
-function getRoleName(roleId) {
-  return authRoles.find((role) => role.VaiTroID === Number(roleId))?.TenVaiTro || 'SinhVien'
-}
-
 function normalizeUser(user) {
   return {
     ...user,
     NguoiDungID: Number(user.NguoiDungID),
     VaiTroID: Number(user.VaiTroID),
-    TenVaiTro: user.TenVaiTro || getRoleName(user.VaiTroID),
+    TenVaiTro: getRoleDefinition(user.TenVaiTro || user.VaiTroID).TenVaiTro,
     TrangThai: Number(user.TrangThai ?? 1),
   }
 }
@@ -136,7 +128,7 @@ export function generateNextAccountCode(roleId = 4) {
 export async function generateNextAccountCodeFromBackend(roleId = 4) {
   const role = Number(roleId)
 
-  if (role !== 4) return ''
+  if (role !== ROLE_IDS.SINH_VIEN) return ''
 
   try {
     const students = await examEndpoints.getSinhVien()
@@ -287,7 +279,7 @@ export function loginWithSeededAccount(payload) {
 }
 
 export function signupWithLocalAccount(payload) {
-  const roleId = Number(payload.VaiTroID || 4)
+  const roleId = Number(payload.VaiTroID || ROLE_IDS.SINH_VIEN)
   const code = String(payload.MaDinhDanh || payload.MaSinhVien || '').trim() || generateNextAccountCode(roleId)
   const user = createAccountUser({
     HoTen: payload.HoTen,

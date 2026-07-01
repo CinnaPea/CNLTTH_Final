@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { examEndpoints } from '../api/examEndpoints'
+import Dialog, { ConfirmDialog } from '../components/common/Dialog'
+import { Field, FormGrid, Input, Select } from '../components/common/FormField'
+import { useToast } from '../components/common/Toast'
+import MB01Print from '../components/forms/MB01_DanhSachDangKy'
 import DataTable from '../components/ui/DataTable'
 import PageHeader from '../components/ui/PageHeader'
 import StatusBadge from '../components/ui/StatusBadge'
@@ -39,7 +43,28 @@ function getRegistrationLabel(status) {
   return status || '-'
 }
 
+function toPrintExam(exam) {
+  if (!exam) return null
+  return {
+    ...exam,
+    MonThi: exam.MonThi || exam.mon_thi || exam.subject,
+  }
+}
+
+function formatDate(value) {
+  if (!value) return '-'
+  return String(value).slice(0, 10)
+}
+
+function formatTimeRange(exam) {
+  const start = exam?.GioBatDau ? String(exam.GioBatDau).slice(0, 5) : ''
+  const end = exam?.GioKetThuc ? String(exam.GioKetThuc).slice(0, 5) : ''
+  if (start && end) return `${start} - ${end}`
+  return start || end || '-'
+}
+
 function RegistrationsPage() {
+  const toast = useToast()
   const [registrations, setRegistrations] = useState([])
   const [exams, setExams] = useState([])
   const [students, setStudents] = useState([])
@@ -49,6 +74,7 @@ function RegistrationsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const [actionId, setActionId] = useState(null)
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
@@ -155,15 +181,19 @@ function RegistrationsPage() {
       if (editingRegistration) {
         await examEndpoints.updateDangKy(editingRegistration.DangKyThiID, toPayload(form))
         setNotice('Da cap nhat dang ky thi.')
+        toast?.('Da cap nhat dang ky thi.', 'success')
       } else {
         await examEndpoints.createDangKy(toPayload(form))
         setNotice('Da tao dang ky thi moi.')
+        toast?.('Da tao dang ky thi moi.', 'success')
       }
 
       closeModal()
       await loadData()
     } catch (saveError) {
-      setError(getErrorMessage(saveError))
+      const message = getErrorMessage(saveError)
+      setError(message)
+      toast?.(message, 'error')
     } finally {
       setIsSaving(false)
     }
@@ -177,16 +207,19 @@ function RegistrationsPage() {
     try {
       await examEndpoints.cancelDangKy(registration.DangKyThiID)
       setNotice('Da huy dang ky thi.')
+      toast?.('Da huy dang ky thi.', 'success')
       await loadData()
     } catch (cancelError) {
-      setError(getErrorMessage(cancelError))
+      const message = getErrorMessage(cancelError)
+      setError(message)
+      toast?.(message, 'error')
     } finally {
       setActionId(null)
     }
   }
 
   async function removeRegistration(registration) {
-    if (!window.confirm(`Xoa dang ky ${registration.SoBaoDanh || registration.DangKyThiID}?`)) return
+    if (!registration) return
 
     setActionId(registration.DangKyThiID)
     setError('')
@@ -195,37 +228,62 @@ function RegistrationsPage() {
     try {
       await examEndpoints.deleteDangKy(registration.DangKyThiID)
       setNotice('Da xoa dang ky thi.')
+      toast?.('Da xoa dang ky thi.', 'success')
       await loadData()
     } catch (deleteError) {
-      setError(getErrorMessage(deleteError))
+      const message = getErrorMessage(deleteError)
+      setError(message)
+      toast?.(message, 'error')
     } finally {
       setActionId(null)
+      setDeleteTarget(null)
     }
   }
 
   const rows = registrations.map((registration) => {
-    const exam = registration.ky_thi || {}
-    const student = registration.sinh_vien || {}
+    const exam = registration.KyThi
+      || registration.ky_thi
+      || exams.find((item) => String(item.KyThiID) === String(registration.KyThiID))
+      || {}
+    const student = registration.SinhVien
+      || registration.sinh_vien
+      || students.find((item) => String(item.SinhVienID) === String(registration.SinhVienID))
+      || {}
+    const subject = exam.MonThi || exam.mon_thi || exam.subject || {}
 
     return {
       ...registration,
+      KyThi: toPrintExam(exam),
+      SinhVien: student,
       id: registration.SoBaoDanh || `DK${registration.DangKyThiID}`,
       exam: exam.MaKyThi || registration.KyThiID,
       examName: exam.TenKyThi || '-',
-      studentCode: student.MaSinhVien || registration.SinhVienID,
+      subjectName: subject.TenMon || '-',
+      examDate: formatDate(exam.NgayThi),
+      examTime: formatTimeRange(exam),
+      studentCode: student.MaSinhVien || `SV#${registration.SinhVienID}`,
       studentName: student.HoTen || '-',
       className: student.Lop || '-',
       status: getRegistrationLabel(registration.TrangThaiDangKy),
     }
   }).filter((registration) => {
-    const text = `${registration.id} ${registration.exam} ${registration.examName} ${registration.studentCode} ${registration.studentName} ${registration.className}`.toLowerCase()
+    const text = `${registration.id} ${registration.exam} ${registration.examName} ${registration.subjectName} ${registration.studentCode} ${registration.studentName} ${registration.className}`.toLowerCase()
     return text.includes(query.trim().toLowerCase())
   })
+
+  const printExam = rows[0]?.KyThi || toPrintExam(exams[0])
+  const printRows = rows.map((registration) => ({
+    ...registration,
+    SinhVien: registration.SinhVien,
+  }))
 
   const columns = [
     { key: 'id', label: 'SBD' },
     { key: 'exam', label: 'Ky thi' },
     { key: 'examName', label: 'Ten ky thi' },
+    { key: 'subjectName', label: 'Mon thi' },
+    { key: 'examDate', label: 'Ngay thi' },
+    { key: 'examTime', label: 'Gio thi' },
     { key: 'studentCode', label: 'Ma SV' },
     { key: 'studentName', label: 'Thi sinh' },
     { key: 'className', label: 'Lop' },
@@ -247,7 +305,7 @@ function RegistrationsPage() {
           <button
             className="table-action table-action--danger"
             disabled={actionId === row.DangKyThiID}
-            onClick={() => removeRegistration(row)}
+            onClick={() => setDeleteTarget(row)}
             type="button"
           >
             Xoa
@@ -263,8 +321,19 @@ function RegistrationsPage() {
         eyebrow="CanBoDaoTao"
         title="Dang ky thi"
         description="Gan thi sinh vao ky thi da cong bo de chuan bi cho phan phong."
-        action={<button className="button button--navy button--compact" disabled={publishedExams.length === 0 || students.length === 0} onClick={openCreateModal} type="button">Them dang ky</button>}
+        action={(
+          <div className="page-header__actions">
+            <button className="button button--soft button--compact" disabled={printRows.length === 0} onClick={() => window.print()} type="button">
+              In MB.01
+            </button>
+            <button className="button button--navy button--compact" disabled={publishedExams.length === 0 || students.length === 0} onClick={openCreateModal} type="button">
+              Them dang ky
+            </button>
+          </div>
+        )}
       />
+
+      <MB01Print kyThi={printExam} danhSach={printRows} />
 
       <section className="exam-overview-strip">
         <div>
@@ -298,62 +367,69 @@ function RegistrationsPage() {
         )}
       </section>
 
-      {isModalOpen && (
-        <div className="exam-modal-backdrop" onClick={closeModal}>
-          <form className="exam-modal" onClick={(event) => event.stopPropagation()} onSubmit={submitForm}>
-            <div className="exam-form__heading">
-              <div>
-                <p>{editingRegistration ? 'Cap nhat dang ky' : 'Tao dang ky'}</p>
-                <h2>{editingRegistration ? editingRegistration.SoBaoDanh || 'Dang ky thi' : 'Dang ky moi'}</h2>
-              </div>
-              <button className="table-action" onClick={closeModal} type="button">Dong</button>
+      <Dialog
+        open={isModalOpen}
+        title={editingRegistration ? 'Cap nhat dang ky' : 'Tao dang ky'}
+        onClose={closeModal}
+        width={760}
+      >
+        <form className="exam-modal" onSubmit={submitForm}>
+          <div className="exam-form__heading">
+            <div>
+              <p>{editingRegistration ? 'Cap nhat dang ky' : 'Tao dang ky'}</p>
+              <h2>{editingRegistration ? editingRegistration.SoBaoDanh || 'Dang ky thi' : 'Dang ky moi'}</h2>
             </div>
+          </div>
 
-            <div className="exam-form__grid">
-              <label>
-                <span>Ky thi</span>
-                <select name="KyThiID" onChange={updateForm} required value={form.KyThiID}>
-                  <option value="">Chon ky thi</option>
-                  {(editingRegistration ? exams : publishedExams).map((exam) => (
-                    <option key={exam.KyThiID} value={exam.KyThiID}>
-                      {exam.MaKyThi} - {exam.TenKyThi} ({exam.TrangThai})
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Thi sinh</span>
-                <select name="SinhVienID" onChange={updateForm} required value={form.SinhVienID}>
-                  <option value="">Chon thi sinh</option>
-                  {students.map((student) => (
-                    <option key={student.SinhVienID} value={student.SinhVienID}>
-                      {student.MaSinhVien} - {student.HoTen}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>So bao danh</span>
-                <input name="SoBaoDanh" onChange={updateForm} placeholder="De trong de Ruby tu tao" value={form.SoBaoDanh} />
-              </label>
-              <label>
-                <span>Trang thai</span>
-                <select name="TrangThaiDangKy" onChange={updateForm} value={form.TrangThaiDangKy}>
-                  <option value="registered">Da dang ky</option>
-                  <option value="cancelled">Da huy</option>
-                </select>
-              </label>
-            </div>
+          <FormGrid>
+            <Field label="Ky thi" required>
+              <Select name="KyThiID" onChange={updateForm} required value={form.KyThiID}>
+                <option value="">Chon ky thi</option>
+                {(editingRegistration ? exams : publishedExams).map((exam) => (
+                  <option key={exam.KyThiID} value={exam.KyThiID}>
+                    {exam.MaKyThi} - {exam.TenKyThi} ({exam.TrangThai})
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Thi sinh" required>
+              <Select name="SinhVienID" onChange={updateForm} required value={form.SinhVienID}>
+                <option value="">Chon thi sinh</option>
+                {students.map((student) => (
+                  <option key={student.SinhVienID} value={student.SinhVienID}>
+                    {student.MaSinhVien} - {student.HoTen}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="So bao danh">
+              <Input name="SoBaoDanh" onChange={updateForm} placeholder="De trong de backend tu tao" value={form.SoBaoDanh} />
+            </Field>
+            <Field label="Trang thai">
+              <Select name="TrangThaiDangKy" onChange={updateForm} value={form.TrangThaiDangKy}>
+                <option value="registered">Da dang ky</option>
+                <option value="cancelled">Da huy</option>
+              </Select>
+            </Field>
+          </FormGrid>
 
-            <div className="exam-modal__footer">
-              <button className="button button--soft button--compact" onClick={closeModal} type="button">Huy</button>
-              <button className="button button--green button--compact" disabled={isSaving} type="submit">
-                {isSaving ? 'Dang luu...' : editingRegistration ? 'Luu thay doi' : 'Tao dang ky'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+          <div className="exam-modal__footer">
+            <button className="button button--soft button--compact" onClick={closeModal} type="button">Huy</button>
+            <button className="button button--green button--compact" disabled={isSaving} type="submit">
+              {isSaving ? 'Dang luu...' : editingRegistration ? 'Luu thay doi' : 'Tao dang ky'}
+            </button>
+          </div>
+        </form>
+      </Dialog>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Xoa dang ky"
+        message={`Xoa dang ky ${deleteTarget?.SoBaoDanh || deleteTarget?.DangKyThiID || ''}?`}
+        confirmLabel="Xoa"
+        danger
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => removeRegistration(deleteTarget)}
+      />
     </>
   )
 }

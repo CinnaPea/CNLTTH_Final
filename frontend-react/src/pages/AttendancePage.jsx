@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getAuthSession } from '../api/authClient'
 import { examEndpoints } from '../api/examEndpoints'
+import MB04Print from '../components/forms/MB04_BangDiemDanh'
 import PageHeader from '../components/ui/PageHeader'
 
 const attendanceLabels = {
@@ -25,11 +26,77 @@ function getRoomLabel(room) {
   return room?.MaPhong || room?.TenPhong || room?.PhongThiID || '-'
 }
 
+function getRecordId(row, key) {
+  const camelKey = key.charAt(0).toLowerCase() + key.slice(1)
+  return row?.[key] ?? row?.[camelKey] ?? row?.id ?? null
+}
+
+function getAttendanceId(row) {
+  return getRecordId(row, 'DiemDanhID')
+}
+
+function getRegistrationId(row) {
+  return getRecordId(row, 'DangKyThiID')
+    ?? row?.DangKyThi?.DangKyThiID
+    ?? row?.dang_ky_thi?.DangKyThiID
+    ?? null
+}
+
+function getExamId(row) {
+  const registration = row?.DangKyThi || row?.dang_ky_thi || {}
+
+  return getRecordId(row, 'KyThiID')
+    ?? row?.KyThi?.KyThiID
+    ?? row?.ky_thi?.KyThiID
+    ?? registration.KyThiID
+    ?? registration.KyThi?.KyThiID
+    ?? registration.ky_thi?.KyThiID
+    ?? null
+}
+
+function getRoomId(row) {
+  return getRecordId(row, 'PhongThiID')
+    ?? row?.PhongThi?.PhongThiID
+    ?? row?.phong_thi?.PhongThiID
+    ?? null
+}
+
+function toPrintExam(exam) {
+  if (!exam) return null
+  return {
+    ...exam,
+    MonThi: exam.MonThi || exam.mon_thi || exam.subject,
+  }
+}
+
+function toExamUpdatePayload(exam, status) {
+  return {
+    MaKyThi: exam.MaKyThi,
+    TenKyThi: exam.TenKyThi,
+    MonThiID: exam.MonThiID,
+    NgayThi: exam.NgayThi,
+    GioBatDau: exam.GioBatDau,
+    GioKetThuc: exam.GioKetThuc,
+    ThoiHanDangKyDen: exam.ThoiHanDangKyDen || null,
+    MoTa: exam.MoTa || null,
+    TrangThai: status,
+  }
+}
+
+function getAttendanceRegistration(row) {
+  return row.DangKyThi || row.dang_ky_thi || {}
+}
+
+function getRegistrationStudent(registration) {
+  return registration.SinhVien || registration.sinh_vien || {}
+}
+
 function AttendancePage() {
   const session = getAuthSession()
   const currentUserId = session?.user?.NguoiDungID || null
   const [attendanceRows, setAttendanceRows] = useState([])
   const [seatRows, setSeatRows] = useState([])
+  const [rooms, setRooms] = useState([])
   const [exams, setExams] = useState([])
   const [selectedExamId, setSelectedExamId] = useState('')
   const [selectedRoomId, setSelectedRoomId] = useState('')
@@ -46,36 +113,65 @@ function AttendancePage() {
 
   const filteredRows = useMemo(
     () => selectedExamId
-      ? attendanceRows.filter((row) => String(row.KyThiID) === String(selectedExamId))
+      ? attendanceRows.filter((row) => String(getExamId(row)) === String(selectedExamId))
       : attendanceRows,
     [attendanceRows, selectedExamId],
+  )
+
+  const selectedSeatRows = useMemo(
+    () => selectedExamId
+      ? seatRows.filter((row) => String(getExamId(row)) === String(selectedExamId))
+      : seatRows,
+    [seatRows, selectedExamId],
   )
 
   const seatByRegistration = useMemo(() => {
     const map = new Map()
     seatRows.forEach((seat) => {
-      map.set(String(seat.DangKyThiID), seat)
+      map.set(String(getRegistrationId(seat)), seat)
     })
     return map
   }, [seatRows])
 
+  const displayRows = useMemo(() => {
+    const existingAttendanceIds = new Set(filteredRows.map((row) => String(getRegistrationId(row))))
+    const previewRows = selectedSeatRows
+      .filter((seat) => !existingAttendanceIds.has(String(getRegistrationId(seat))))
+      .map((seat) => ({
+        ...seat,
+        DiemDanhID: null,
+        KyThiID: getExamId(seat),
+        PhongThiID: getRoomId(seat),
+        DangKyThiID: getRegistrationId(seat),
+        TrangThai: 'absent',
+        isSeatPreview: true,
+      }))
+
+    return [...filteredRows, ...previewRows]
+  }, [filteredRows, selectedSeatRows])
+
   const roomOptions = useMemo(() => {
     const map = new Map()
 
-    filteredRows.forEach((row) => {
-      const room = row.phong_thi || {}
-      const roomId = String(row.PhongThiID || room.PhongThiID || '')
+    displayRows.forEach((row) => {
+      const room = row.PhongThi || row.phong_thi || rooms.find((item) => String(item.PhongThiID) === String(getRoomId(row))) || {}
+      const roomId = String(getRoomId(row) || room.PhongThiID || '')
       if (!roomId || map.has(roomId)) return
       map.set(roomId, {
         id: roomId,
         label: getRoomLabel(room),
+        room,
       })
     })
 
     return [...map.values()]
-  }, [filteredRows])
+  }, [displayRows, rooms])
 
   const activeRoomId = selectedRoomId || roomOptions[0]?.id || ''
+  const activeRoom = useMemo(() => {
+    const optionRoom = roomOptions.find((room) => room.id === activeRoomId)?.room
+    return optionRoom || rooms.find((room) => String(room.PhongThiID) === String(activeRoomId)) || null
+  }, [activeRoomId, roomOptions, rooms])
 
   const metrics = useMemo(() => {
     const counts = {
@@ -85,27 +181,30 @@ function AttendancePage() {
       excused: 0,
     }
 
-    filteredRows.forEach((row) => {
+    displayRows.forEach((row) => {
       if (counts[row.TrangThai] !== undefined) counts[row.TrangThai] += 1
     })
 
     return counts
-  }, [filteredRows])
+  }, [displayRows])
 
   const boardItems = useMemo(() => {
     const roomRows = activeRoomId
-      ? filteredRows.filter((row) => String(row.PhongThiID) === String(activeRoomId))
-      : filteredRows
+      ? displayRows.filter((row) => String(getRoomId(row)) === String(activeRoomId))
+      : displayRows
 
     return roomRows.map((record, index) => {
-      const registration = record.dang_ky_thi || {}
-      const student = registration.sinh_vien || {}
-      const seat = seatByRegistration.get(String(record.DangKyThiID)) || {}
+      const registration = getAttendanceRegistration(record)
+      const student = getRegistrationStudent(registration)
+      const seat = seatByRegistration.get(String(getRegistrationId(record))) || {}
       const fallbackIndex = index
       const fallbackColumns = 5
 
       return {
         ...record,
+        DiemDanhID: getAttendanceId(record),
+        DangKyThiID: getRegistrationId(record),
+        PhongThiID: getRoomId(record),
         studentCode: student.MaSinhVien || '-',
         studentName: student.HoTen || '-',
         className: student.Lop || '-',
@@ -115,28 +214,71 @@ function AttendancePage() {
         column: Number(seat.Cot || (fallbackIndex % fallbackColumns) + 1),
       }
     }).sort((a, b) => (a.row - b.row) || (a.column - b.column))
-  }, [activeRoomId, filteredRows, seatByRegistration])
+  }, [activeRoomId, displayRows, seatByRegistration])
 
-  const boardColumnCount = Math.max(5, ...boardItems.map((item) => item.column || 1))
-  const boardRowCount = Math.max(1, ...boardItems.map((item) => item.row || 1))
-  const activeRoomLabel = roomOptions.find((room) => room.id === activeRoomId)?.label || 'Tat ca phong'
+  const roomCapacity = Number(activeRoom?.SucChua || 0)
+  const roomColumnCount = Math.max(1, Number(activeRoom?.SoCot || 5))
+  const boardColumnCount = Math.max(roomColumnCount, ...boardItems.map((item) => item.column || 1))
+  const boardRowCount = Math.max(
+    1,
+    Number(activeRoom?.SoHang || 0),
+    Math.ceil(Math.max(roomCapacity, 1) / boardColumnCount),
+    ...boardItems.map((item) => item.row || 1),
+  )
+  const activeRoomLabel = activeRoom ? getRoomLabel(activeRoom) : roomOptions.find((room) => room.id === activeRoomId)?.label || 'Tat ca phong'
+
+  const printRows = useMemo(() => {
+    const roomRows = activeRoomId
+      ? displayRows.filter((row) => String(getRoomId(row)) === String(activeRoomId))
+      : displayRows
+
+    return roomRows.map((row) => {
+      const registration = getAttendanceRegistration(row)
+      const seat = seatByRegistration.get(String(getRegistrationId(row))) || {}
+
+      return {
+        ...row,
+        PhongThi: row.PhongThi || row.phong_thi || seat.PhongThi || seat.phong_thi,
+        DangKyThi: {
+          ...registration,
+          SinhVien: getRegistrationStudent(registration),
+        },
+      }
+    })
+  }, [activeRoomId, displayRows, seatByRegistration])
+
+  const canOpenAttendance = Boolean(selectedExam && selectedExamId && selectedSeatRows.length > 0 && !isRunning && selectedExam.TrangThai !== 'attendance_open')
+
+  function chooseDefaultExam(nextExams, nextSeats) {
+    const examWithOpenAttendance = nextExams.find((exam) => exam.TrangThai === 'attendance_open')
+    if (examWithOpenAttendance) return examWithOpenAttendance.KyThiID
+
+    const examWithSeatStatus = nextExams.find((exam) => exam.TrangThai === 'seat_assigned')
+    if (examWithSeatStatus) return examWithSeatStatus.KyThiID
+
+    const seatedExamIds = new Set((Array.isArray(nextSeats) ? nextSeats : []).map((seat) => String(getExamId(seat))))
+    const examWithSeats = nextExams.find((exam) => seatedExamIds.has(String(exam.KyThiID)))
+    return examWithSeats?.KyThiID || nextExams[0]?.KyThiID || ''
+  }
 
   async function loadData() {
     setIsLoading(true)
     setError('')
 
     try {
-      const [attendanceData, examData, seatData] = await Promise.all([
+      const [attendanceData, examData, seatData, roomData] = await Promise.all([
         examEndpoints.getDiemDanh(),
         examEndpoints.getKyThis(),
         examEndpoints.getXepCho(),
+        examEndpoints.getPhong(),
       ])
 
       const nextExams = Array.isArray(examData) ? examData : []
       setAttendanceRows(Array.isArray(attendanceData) ? attendanceData : [])
       setSeatRows(Array.isArray(seatData) ? seatData : [])
+      setRooms(Array.isArray(roomData) ? roomData : [])
       setExams(nextExams)
-      setSelectedExamId((current) => current || nextExams.find((exam) => exam.TrangThai === 'seat_assigned')?.KyThiID || nextExams[0]?.KyThiID || '')
+      setSelectedExamId((current) => current || chooseDefaultExam(nextExams, seatData))
     } catch (loadError) {
       setError(getErrorMessage(loadError))
     } finally {
@@ -149,10 +291,11 @@ function AttendancePage() {
 
     async function loadInitialData() {
       try {
-        const [attendanceData, examData, seatData] = await Promise.all([
+        const [attendanceData, examData, seatData, roomData] = await Promise.all([
           examEndpoints.getDiemDanh(),
           examEndpoints.getKyThis(),
           examEndpoints.getXepCho(),
+          examEndpoints.getPhong(),
         ])
 
         if (!isMounted) return
@@ -160,8 +303,9 @@ function AttendancePage() {
         const nextExams = Array.isArray(examData) ? examData : []
         setAttendanceRows(Array.isArray(attendanceData) ? attendanceData : [])
         setSeatRows(Array.isArray(seatData) ? seatData : [])
+        setRooms(Array.isArray(roomData) ? roomData : [])
         setExams(nextExams)
-        setSelectedExamId(nextExams.find((exam) => exam.TrangThai === 'seat_assigned')?.KyThiID || nextExams[0]?.KyThiID || '')
+        setSelectedExamId(chooseDefaultExam(nextExams, seatData))
       } catch (loadError) {
         if (isMounted) setError(getErrorMessage(loadError))
       } finally {
@@ -184,6 +328,10 @@ function AttendancePage() {
     setNotice('')
 
     try {
+      if (selectedExam?.TrangThai !== 'seat_assigned') {
+        await examEndpoints.updateKyThi(selectedExamId, toExamUpdatePayload(selectedExam, 'seat_assigned'))
+      }
+
       const result = await examEndpoints.openDiemDanh(selectedExamId, currentUserId)
       setNotice(result?.message || 'Da mo diem danh.')
       await loadData()
@@ -195,12 +343,35 @@ function AttendancePage() {
   }
 
   async function updateStatus(row, status) {
-    setActionId(row.DiemDanhID)
+    const initialAttendanceId = getAttendanceId(row)
+    const actionKey = initialAttendanceId || `preview-${getRegistrationId(row)}`
+
+    setActionId(actionKey)
     setError('')
     setNotice('')
 
     try {
-      await examEndpoints.updateDiemDanh(row.DiemDanhID, {
+      let attendanceId = initialAttendanceId
+
+      if (!attendanceId) {
+        if (selectedExam?.TrangThai !== 'seat_assigned') {
+          await examEndpoints.updateKyThi(selectedExamId, toExamUpdatePayload(selectedExam, 'seat_assigned'))
+        }
+
+        await examEndpoints.openDiemDanh(selectedExamId, currentUserId)
+
+        const freshRows = await examEndpoints.getDiemDanh()
+        const createdRow = (Array.isArray(freshRows) ? freshRows : []).find((item) => (
+          String(getRegistrationId(item)) === String(getRegistrationId(row))
+        ))
+        attendanceId = getAttendanceId(createdRow)
+
+        if (!attendanceId) {
+          throw new Error('Da mo diem danh nhung chua tim thay ban ghi cua thi sinh nay.')
+        }
+      }
+
+      await examEndpoints.updateDiemDanh(attendanceId, {
         TrangThai: status,
         NguoiGhiNhanID: currentUserId,
       })
@@ -220,11 +391,18 @@ function AttendancePage() {
         title="Diem danh phong thi"
         description="Bang diem danh dang hien thi theo so do cho ngoi. Bam vao tung o de chuyen trang thai R/G/B/Y."
         action={(
-          <button className="button button--green button--compact" disabled={!selectedExamId || isRunning || selectedExam?.TrangThai !== 'seat_assigned'} onClick={openAttendance} type="button">
-            {isRunning ? 'Dang mo...' : 'Mo diem danh'}
-          </button>
+          <div className="page-header__actions">
+            <button className="button button--soft button--compact" disabled={printRows.length === 0} onClick={() => window.print()} type="button">
+              In MB.04
+            </button>
+            <button className="button button--green button--compact" disabled={!canOpenAttendance} onClick={openAttendance} type="button">
+              {isRunning ? 'Dang mo...' : 'Mo diem danh'}
+            </button>
+          </div>
         )}
       />
+
+      <MB04Print kyThi={toPrintExam(selectedExam)} danhSach={printRows} stats={metrics} />
 
       <section className="workflow-toolbar workflow-toolbar--split">
         <label>
@@ -317,8 +495,8 @@ function AttendancePage() {
                     return (
                       <button
                         className={`attendance-seat attendance-seat--${item.TrangThai}`}
-                        disabled={actionId === item.DiemDanhID}
-                        key={item.DiemDanhID}
+                        disabled={actionId === (item.DiemDanhID || `preview-${item.DangKyThiID}`)}
+                        key={item.DiemDanhID || `preview-${item.DangKyThiID}`}
                         onClick={() => updateStatus(item, getNextStatus(item.TrangThai))}
                         title={`${item.studentName} - ${attendanceLabels[item.TrangThai]}`}
                         type="button"

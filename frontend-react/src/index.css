@@ -1325,6 +1325,7 @@ ul {
 }
 
 .app-sidebar {
+  position: relative;
   display: none;
   width: 280px;
   height: 100vh;
@@ -1335,12 +1336,16 @@ ul {
   color: #fff;
   overflow: hidden;
   box-shadow: 20px 0 44px rgba(13, 55, 97, 0.18);
+  transition:
+    width 0.2s ease,
+    padding 0.2s ease;
 }
 
 .app-sidebar__brand {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-height: 48px;
 }
 
 .app-sidebar__brand > span:first-child {
@@ -1365,6 +1370,24 @@ ul {
   color: rgba(255, 255, 255, 0.58);
 }
 
+.app-sidebar__toggle {
+  position: absolute;
+  top: 76px;
+  right: 16px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.app-sidebar__toggle:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
 .app-sidebar__nav {
   display: grid;
   gap: 8px;
@@ -1384,6 +1407,10 @@ ul {
     background-color 0.2s ease,
     color 0.2s ease,
     box-shadow 0.2s ease;
+}
+
+.app-sidebar__nav a em {
+  font-style: normal;
 }
 
 .app-sidebar__nav a:hover {
@@ -1434,6 +1461,36 @@ ul {
   color: rgba(255, 255, 255, 0.65);
   font-size: 0.9rem;
   line-height: 1.6;
+}
+
+.app-sidebar__note small {
+  display: block;
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.app-sidebar.is-collapsed {
+  width: 88px;
+  padding: 20px 14px;
+}
+
+.app-sidebar.is-collapsed .app-sidebar__brand,
+.app-sidebar.is-collapsed .app-sidebar__nav a {
+  justify-content: center;
+}
+
+.app-sidebar.is-collapsed .app-sidebar__brand > span:last-child,
+.app-sidebar.is-collapsed .app-sidebar__nav a em,
+.app-sidebar.is-collapsed .app-sidebar__note {
+  display: none;
+}
+
+.app-sidebar.is-collapsed .app-sidebar__toggle {
+  right: 50%;
+  transform: translateX(50%);
 }
 
 .app-topbar {
@@ -2899,6 +2956,46 @@ ul {
   font-weight: 700;
 }
 
+.manual-assignment-list {
+  display: grid;
+  gap: 10px;
+  max-height: 280px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.manual-assignment-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.86);
+  padding: 10px 12px;
+}
+
+.manual-assignment-option input {
+  width: 18px;
+  height: 18px;
+}
+
+.manual-assignment-option strong,
+.manual-assignment-option small {
+  display: block;
+}
+
+.manual-assignment-option strong {
+  color: var(--navy);
+  font-size: 0.92rem;
+}
+
+.manual-assignment-option small {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
 .attendance-board {
   display: grid;
   grid-template-columns: 58px repeat(var(--attendance-columns), minmax(132px, 1fr));
@@ -3035,6 +3132,13 @@ ul {
   padding-bottom: 6px;
 }
 
+.seat-plan-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+  gap: 16px;
+  align-items: start;
+}
+
 .seat-plan-cell {
   display: grid;
   gap: 6px;
@@ -3082,6 +3186,64 @@ ul {
 .seat-plan-cell--assigned {
   border: 1px solid #93c5fd;
   background: #dbeafe;
+}
+
+.seat-plan-cell[draggable="true"] {
+  cursor: grab;
+}
+
+.seat-unassigned-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px dashed #93c5fd;
+  border-radius: 18px;
+  background: rgba(239, 246, 255, 0.74);
+  padding: 14px;
+}
+
+.seat-unassigned-panel p {
+  color: #059669;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.seat-unassigned-panel h3 {
+  color: var(--navy);
+  font-size: 1.15rem;
+  margin-top: 4px;
+}
+
+.seat-unassigned-list {
+  display: grid;
+  gap: 8px;
+  max-height: 460px;
+  overflow: auto;
+}
+
+.seat-unassigned-card {
+  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  background: #fff;
+  cursor: grab;
+  padding: 10px 12px;
+}
+
+.seat-unassigned-card strong,
+.seat-unassigned-card span {
+  display: block;
+}
+
+.seat-unassigned-card strong {
+  color: var(--navy);
+  font-size: 0.92rem;
+}
+
+.seat-unassigned-card span {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 0.78rem;
 }
 
 .seat-modal-current {
@@ -3993,6 +4155,7 @@ ul {
   .account-form__grid,
   .exam-modal .exam-form__grid,
   .account-modal .account-form__grid,
+  .seat-plan-workspace,
   .exam-overview-strip,
   .account-overview-strip,
   .workflow-toolbar--split,

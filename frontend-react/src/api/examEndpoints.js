@@ -22,6 +22,8 @@ const retrySafeActions = new Set([
   'getNguoiDung',
   'getNguoiDungById',
   'getVaiTro',
+  'getNhatKy',
+  'getNhatKyById',
 ])
 
 async function callWithFailover(action, args) {

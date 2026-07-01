@@ -1,5 +1,24 @@
 import { csharpAPI } from "./client";
 
+function getSessionUserHeaders() {
+    try {
+        const session = JSON.parse(localStorage.getItem("examflow.auth.session") || "null");
+        const userId = session?.user?.NguoiDungID;
+        return userId ? { "X-User-Id": String(userId) } : {};
+    } catch {
+        return {};
+    }
+}
+
+function queryString(params) {
+    const query = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if(value !== undefined && value !== null && value !== "") query.set(key, value);
+    });
+    const text = query.toString();
+    return text ? `?${text}` : "";
+}
+
 export const csharpEndpoints = {
     health() {
         return csharpAPI.get("/health");
@@ -27,6 +46,12 @@ export const csharpEndpoints = {
     },
     getVaiTro() {
         return csharpAPI.get("/vai_tro");
+    },
+    getNhatKy(params = {}) {
+        return csharpAPI.get(`/nhat_ky${queryString(params)}`, { headers: getSessionUserHeaders() });
+    },
+    getNhatKyById(id) {
+        return csharpAPI.get(`/nhat_ky/${id}`, { headers: getSessionUserHeaders() });
     },
     getMonThi() {
         return csharpAPI.get("/mon_thi");
@@ -102,6 +127,9 @@ export const csharpEndpoints = {
     },
     getPhanPhong() {
         return csharpAPI.get("/phan_phong");
+    },
+    createPhanPhong(payload) {
+        return csharpAPI.post("/phan_phong", { phan_phong: payload });
     },
     deletePhanPhong(id) {
         return csharpAPI.delete(`/phan_phong/${id}`);

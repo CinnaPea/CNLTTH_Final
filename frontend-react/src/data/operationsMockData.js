@@ -31,6 +31,7 @@ export const appNavItems = [
   { label: 'Phan phong', hash: '#room-assignment', icon: '->' },
   { label: 'Xep cho', hash: '#seat-assignment', icon: '##' },
   { label: 'Diem danh', hash: '#attendance', icon: 'ok' },
+  { label: 'Nhat ky', hash: '#audit-log', icon: 'log' },
 ]
 
 export const roleNavAccess = {

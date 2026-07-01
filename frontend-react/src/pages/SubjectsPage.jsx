@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { examEndpoints } from '../api/examEndpoints'
+import Dialog, { ConfirmDialog } from '../components/common/Dialog'
+import { Field, FormGrid, Input } from '../components/common/FormField'
 import DataTable from '../components/ui/DataTable'
 import PageHeader from '../components/ui/PageHeader'
 
@@ -33,6 +35,7 @@ function SubjectsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
 
@@ -124,7 +127,7 @@ function SubjectsPage() {
   }
 
   async function removeSubject(subject) {
-    if (!window.confirm(`Xoa mon thi ${subject.MaMon}?`)) return
+    if (!subject) return
 
     setError('')
     setNotice('')
@@ -135,6 +138,8 @@ function SubjectsPage() {
       await loadSubjects()
     } catch (deleteError) {
       setError(getErrorMessage(deleteError))
+    } finally {
+      setDeleteTarget(null)
     }
   }
 
@@ -153,7 +158,7 @@ function SubjectsPage() {
       render: (_, row) => (
         <div className="table-actions">
           <button className="table-action" onClick={() => editSubject(row)} type="button">Sua</button>
-          <button className="table-action table-action--danger" onClick={() => removeSubject(row)} type="button">Xoa</button>
+          <button className="table-action table-action--danger" onClick={() => setDeleteTarget(row)} type="button">Xoa</button>
         </div>
       ),
     },
@@ -196,37 +201,46 @@ function SubjectsPage() {
         )}
       </section>
 
-      {isModalOpen && (
-        <div className="exam-modal-backdrop" onClick={closeModal}>
-          <form className="exam-modal" onClick={(event) => event.stopPropagation()} onSubmit={submitForm}>
-            <div className="exam-form__heading">
-              <div>
-                <p>{editingSubject ? 'Cap nhat mon thi' : 'Tao mon thi'}</p>
-                <h2>{editingSubject ? editingSubject.MaMon : 'Mon thi moi'}</h2>
-              </div>
-              <button className="table-action" onClick={closeModal} type="button">Dong</button>
+      <Dialog
+        open={isModalOpen}
+        title={editingSubject ? 'Cap nhat mon thi' : 'Tao mon thi'}
+        onClose={closeModal}
+        width={640}
+      >
+        <form className="exam-modal" onSubmit={submitForm}>
+          <div className="exam-form__heading">
+            <div>
+              <p>{editingSubject ? 'Cap nhat mon thi' : 'Tao mon thi'}</p>
+              <h2>{editingSubject ? editingSubject.MaMon : 'Mon thi moi'}</h2>
             </div>
+          </div>
 
-            <div className="exam-form__grid">
-              <label>
-                <span>Ma mon</span>
-                <input name="MaMon" onChange={updateForm} required value={form.MaMon} />
-              </label>
-              <label>
-                <span>Ten mon</span>
-                <input name="TenMon" onChange={updateForm} required value={form.TenMon} />
-              </label>
-            </div>
+          <FormGrid>
+            <Field label="Ma mon" required>
+              <Input name="MaMon" onChange={updateForm} required value={form.MaMon} />
+            </Field>
+            <Field label="Ten mon" required>
+              <Input name="TenMon" onChange={updateForm} required value={form.TenMon} />
+            </Field>
+          </FormGrid>
 
-            <div className="exam-modal__footer">
-              <button className="button button--soft button--compact" onClick={closeModal} type="button">Huy</button>
-              <button className="button button--green button--compact" disabled={isSaving} type="submit">
-                {isSaving ? 'Dang luu...' : editingSubject ? 'Luu thay doi' : 'Tao mon thi'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+          <div className="exam-modal__footer">
+            <button className="button button--soft button--compact" onClick={closeModal} type="button">Huy</button>
+            <button className="button button--green button--compact" disabled={isSaving} type="submit">
+              {isSaving ? 'Dang luu...' : editingSubject ? 'Luu thay doi' : 'Tao mon thi'}
+            </button>
+          </div>
+        </form>
+      </Dialog>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Xoa mon thi"
+        message={`Xoa mon thi ${deleteTarget?.MaMon || ''}?`}
+        confirmLabel="Xoa"
+        danger
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => removeSubject(deleteTarget)}
+      />
     </>
   )
 }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { examEndpoints } from '../api/examEndpoints'
+import { ConfirmDialog } from '../components/common/Dialog'
 import DataTable from '../components/ui/DataTable'
 import PageHeader from '../components/ui/PageHeader'
 import StatusBadge from '../components/ui/StatusBadge'
@@ -52,6 +53,7 @@ function RoomsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
 
@@ -153,7 +155,7 @@ function RoomsPage() {
   }
 
   async function removeRoom(room) {
-    if (!window.confirm(`Xoa phong ${room.MaPhong}?`)) return
+    if (!room) return
 
     setError('')
     setNotice('')
@@ -164,6 +166,8 @@ function RoomsPage() {
       await loadRooms()
     } catch (deleteError) {
       setError(getErrorMessage(deleteError))
+    } finally {
+      setDeleteTarget(null)
     }
   }
 
@@ -190,7 +194,7 @@ function RoomsPage() {
       render: (_, row) => (
         <div className="table-actions">
           <button className="table-action" onClick={() => editRoom(row)} type="button">Sua</button>
-          <button className="table-action table-action--danger" onClick={() => removeRoom(row)} type="button">Xoa</button>
+          <button className="table-action table-action--danger" onClick={() => setDeleteTarget(row)} type="button">Xoa</button>
         </div>
       ),
     },
@@ -291,6 +295,15 @@ function RoomsPage() {
           </form>
         </div>
       )}
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Xoa phong thi"
+        message={`Xoa phong ${deleteTarget?.MaPhong || ''}?`}
+        confirmLabel="Xoa"
+        danger
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => removeRoom(deleteTarget)}
+      />
     </>
   )
 }

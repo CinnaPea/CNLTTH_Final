@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { examEndpoints } from '../api/examEndpoints'
+import Dialog, { ConfirmDialog } from '../components/common/Dialog'
+import { Field, FormGrid, Select } from '../components/common/FormField'
+import { useToast } from '../components/common/Toast'
+import MB03Print from '../components/forms/MB03_SoDoXepCho'
 import PageHeader from '../components/ui/PageHeader'
 
 function getErrorMessage(error) {
@@ -23,7 +27,24 @@ function htmlValue(value) {
     .replaceAll("'", '&#39;')
 }
 
+function toPrintExam(exam) {
+  if (!exam) return null
+  return {
+    ...exam,
+    MonThi: exam.MonThi || exam.mon_thi || exam.subject,
+  }
+}
+
+function getAssignmentRegistration(assignment) {
+  return assignment.DangKyThi || assignment.dang_ky_thi || {}
+}
+
+function getRegistrationStudent(registration) {
+  return registration.SinhVien || registration.sinh_vien || {}
+}
+
 function SeatAssignmentPage() {
+  const toast = useToast()
   const [seats, setSeats] = useState([])
   const [assignments, setAssignments] = useState([])
   const [rooms, setRooms] = useState([])
@@ -32,6 +53,9 @@ function SeatAssignmentPage() {
   const [selectedRoomId, setSelectedRoomId] = useState('')
   const [activeSeat, setActiveSeat] = useState(null)
   const [selectedRegistrationId, setSelectedRegistrationId] = useState('')
+  const [draggedRegistrationId, setDraggedRegistrationId] = useState('')
+  const [pendingSeatDrop, setPendingSeatDrop] = useState(null)
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [notice, setNotice] = useState('')
@@ -60,7 +84,7 @@ function SeatAssignmentPage() {
     const map = new Map()
 
     filteredAssignments.forEach((assignment) => {
-      const room = assignment.phong_thi || rooms.find((item) => item.PhongThiID === assignment.PhongThiID) || {}
+      const room = assignment.PhongThi || assignment.phong_thi || rooms.find((item) => item.PhongThiID === assignment.PhongThiID) || {}
       const roomId = String(assignment.PhongThiID || room.PhongThiID || '')
       if (!roomId || map.has(roomId)) return
       map.set(roomId, {
@@ -103,6 +127,42 @@ function SeatAssignmentPage() {
   const rowCount = Math.max(1, baseRows, Math.ceil(Math.max(capacity, roomSeats.length, 1) / columnCount))
   const seatCount = Math.max(capacity, rowCount * columnCount)
   const assignedSeatCount = roomSeats.length
+
+  const openSeatPositions = useMemo(() => {
+    const positions = []
+
+    for (let index = 0; index < rowCount * columnCount; index += 1) {
+      const row = Math.floor(index / columnCount) + 1
+      const column = (index % columnCount) + 1
+
+      if (!seatByPosition.has(`${row}-${column}`)) {
+        positions.push({ row, column })
+      }
+    }
+
+    return positions
+  }, [columnCount, rowCount, seatByPosition])
+
+  const unseatedAssignments = useMemo(() => roomAssignments.filter((assignment) => (
+    !seatByRegistration.has(String(assignment.DangKyThiID))
+  )), [roomAssignments, seatByRegistration])
+
+  const printRows = useMemo(() => roomSeats.map((seat) => {
+    const room = seat.PhongThi
+      || seat.phong_thi
+      || activeRoom
+      || rooms.find((item) => String(item.PhongThiID) === String(seat.PhongThiID))
+    const registration = getAssignmentRegistration(seat)
+
+    return {
+      ...seat,
+      PhongThi: room,
+      DangKyThi: {
+        ...registration,
+        SinhVien: getRegistrationStudent(registration),
+      },
+    }
+  }), [activeRoom, roomSeats, rooms])
 
   async function loadData() {
     setIsLoading(true)
@@ -177,16 +237,16 @@ function SeatAssignmentPage() {
     setError('')
   }
 
-  async function saveSeat() {
-    if (!activeSeat || !selectedRegistrationId) return
+  async function saveSeatAt(row, column, registrationId, options = {}) {
+    if (!registrationId) return
 
     setIsSaving(true)
     setError('')
     setNotice('')
 
     try {
-      const currentSeat = activeSeat.seat
-      const selectedExistingSeat = seatByRegistration.get(String(selectedRegistrationId))
+      const currentSeat = seatByPosition.get(`${row}-${column}`)
+      const selectedExistingSeat = seatByRegistration.get(String(registrationId))
       const deleteIds = new Set()
 
       if (currentSeat?.XepChoID) deleteIds.add(currentSeat.XepChoID)
@@ -194,20 +254,41 @@ function SeatAssignmentPage() {
 
       await Promise.all([...deleteIds].map((id) => examEndpoints.deleteXepCho(id)))
       await examEndpoints.createXepCho({
-        DangKyThiID: Number(selectedRegistrationId),
-        SoCho: getSeatCode(activeSeat.row, activeSeat.column),
-        Hang: activeSeat.row,
-        Cot: activeSeat.column,
+        DangKyThiID: Number(registrationId),
+        SoCho: getSeatCode(row, column),
+        Hang: row,
+        Cot: column,
       })
 
       setNotice('Da cap nhat cho ngoi.')
-      closeSeatModal()
+      toast?.('Da cap nhat cho ngoi.', 'success')
+      if (options.closeModal) closeSeatModal()
       await loadData()
     } catch (saveError) {
-      setError(getErrorMessage(saveError))
+      const message = getErrorMessage(saveError)
+      setError(message)
+      toast?.(message, 'error')
     } finally {
       setIsSaving(false)
+      setDraggedRegistrationId('')
     }
+  }
+
+  async function saveSeat() {
+    if (!activeSeat || !selectedRegistrationId) return
+    await saveSeatAt(activeSeat.row, activeSeat.column, selectedRegistrationId, { closeModal: true })
+  }
+
+  function dropRegistrationOnSeat(row, column, seat) {
+    if (!draggedRegistrationId || isSaving) return
+    const registrationId = String(draggedRegistrationId)
+
+    if (seat && String(seat.DangKyThiID) !== registrationId) {
+      setPendingSeatDrop({ row, column, registrationId, seat })
+      return
+    }
+
+    saveSeatAt(row, column, registrationId)
   }
 
   async function clearSeat() {
@@ -220,20 +301,119 @@ function SeatAssignmentPage() {
     try {
       await examEndpoints.deleteXepCho(activeSeat.seat.XepChoID)
       setNotice('Da xoa cho ngoi.')
+      toast?.('Da xoa cho ngoi.', 'success')
       closeSeatModal()
       await loadData()
     } catch (deleteError) {
-      setError(getErrorMessage(deleteError))
+      const message = getErrorMessage(deleteError)
+      setError(message)
+      toast?.(message, 'error')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  async function clearSeatByDrop(seat) {
+    if (!seat?.XepChoID || isSaving) return
+
+    setIsSaving(true)
+    setError('')
+    setNotice('')
+
+    try {
+      await examEndpoints.deleteXepCho(seat.XepChoID)
+      setNotice('Da dua thi sinh ve danh sach chua xep.')
+      toast?.('Da dua thi sinh ve danh sach chua xep.', 'success')
+      await loadData()
+    } catch (deleteError) {
+      const message = getErrorMessage(deleteError)
+      setError(message)
+      toast?.(message, 'error')
+    } finally {
+      setIsSaving(false)
+      setDraggedRegistrationId('')
+    }
+  }
+
+  async function autoFillRoomSeats() {
+    if (!activeRoom || isSaving) return
+
+    if (unseatedAssignments.length === 0) {
+      setNotice('Phong nay khong con thi sinh chua xep.')
+      toast?.('Phong nay khong con thi sinh chua xep.', 'info')
+      return
+    }
+
+    if (openSeatPositions.length === 0) {
+      setError('Phong nay khong con ghe trong.')
+      toast?.('Phong nay khong con ghe trong.', 'error')
+      return
+    }
+
+    setIsSaving(true)
+    setError('')
+    setNotice('')
+
+    try {
+      const fillCount = Math.min(openSeatPositions.length, unseatedAssignments.length)
+
+      for (let index = 0; index < fillCount; index += 1) {
+        const position = openSeatPositions[index]
+        const assignment = unseatedAssignments[index]
+
+        await examEndpoints.createXepCho({
+          DangKyThiID: Number(assignment.DangKyThiID),
+          SoCho: getSeatCode(position.row, position.column),
+          Hang: position.row,
+          Cot: position.column,
+        })
+      }
+
+      const message = `Da tu dong dien ${fillCount} cho ngoi.`
+      setNotice(message)
+      toast?.(message, 'success')
+      await loadData()
+    } catch (fillError) {
+      const message = getErrorMessage(fillError)
+      setError(message)
+      toast?.(message, 'error')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function resetRoomSeats() {
+    if (!activeRoom || roomSeats.length === 0 || isSaving) return
+
+    setIsSaving(true)
+    setError('')
+    setNotice('')
+
+    try {
+      for (const seat of roomSeats) {
+        await examEndpoints.deleteXepCho(seat.XepChoID)
+      }
+
+      const message = `Da dat lai danh sach ghe cua phong ${getRoomLabel(activeRoom)}.`
+      setNotice(message)
+      toast?.(message, 'success')
+      await loadData()
+    } catch (resetError) {
+      const message = getErrorMessage(resetError)
+      setError(message)
+      toast?.(message, 'error')
+    } finally {
+      setIsSaving(false)
+      setDraggedRegistrationId('')
+      setIsResetConfirmOpen(false)
     }
   }
 
   function exportCsv() {
     const header = ['Phong', 'Hang', 'Cot', 'SoCho', 'SBD', 'MaSinhVien', 'HoTen']
     const lines = roomSeats.map((seat) => {
-      const registration = seat.dang_ky_thi || {}
-      const student = registration.sinh_vien || {}
+      const registration = getAssignmentRegistration(seat)
+      const student = getRegistrationStudent(registration)
 
       return [
         getRoomLabel(activeRoom),
@@ -286,8 +466,8 @@ function SeatAssignmentPage() {
               const row = Math.floor(index / columnCount) + 1
               const column = (index % columnCount) + 1
               const seat = seatByPosition.get(`${row}-${column}`)
-              const registration = seat?.dang_ky_thi || {}
-              const student = registration.sinh_vien || {}
+              const registration = seat ? getAssignmentRegistration(seat) : {}
+              const student = getRegistrationStudent(registration)
 
               return `
                 <div class="seat">
@@ -317,12 +497,33 @@ function SeatAssignmentPage() {
             <button className="button button--soft button--compact" disabled={!activeRoom || roomSeats.length === 0} onClick={exportCsv} type="button">
               CSV
             </button>
+            <button
+              className="button button--soft button--compact"
+              disabled={!activeRoom || isSaving || unseatedAssignments.length === 0 || openSeatPositions.length === 0}
+              onClick={autoFillRoomSeats}
+              type="button"
+            >
+              Tu dong dien
+            </button>
+            <button
+              className="button button--soft button--compact"
+              disabled={!activeRoom || isSaving || roomSeats.length === 0}
+              onClick={() => setIsResetConfirmOpen(true)}
+              type="button"
+            >
+              Dat lai phong
+            </button>
+            <button className="button button--soft button--compact" disabled={!activeRoom || printRows.length === 0} onClick={() => window.print()} type="button">
+              In MB.03
+            </button>
             <button className="button button--navy button--compact" disabled={!activeRoom} onClick={printSeatingPlan} type="button">
               Sinh so do
             </button>
           </div>
         )}
       />
+
+      <MB03Print kyThi={toPrintExam(selectedExam)} danhSach={printRows} />
 
       <section className="workflow-toolbar workflow-toolbar--split">
         <label>
@@ -386,58 +587,102 @@ function SeatAssignmentPage() {
         {isLoading ? (
           <div className="table-placeholder">Dang tai so do xep cho tu Ruby API...</div>
         ) : activeRoom ? (
-          <div className="seat-plan-board" style={{ '--seat-plan-columns': columnCount }}>
-            {Array.from({ length: rowCount * columnCount }, (_, index) => {
-              const row = Math.floor(index / columnCount) + 1
-              const column = (index % columnCount) + 1
-              const seat = seatByPosition.get(`${row}-${column}`)
-              const registration = seat?.dang_ky_thi || {}
-              const student = registration.sinh_vien || {}
+          <div className="seat-plan-workspace">
+            <div className="seat-plan-board" style={{ '--seat-plan-columns': columnCount }}>
+              {Array.from({ length: rowCount * columnCount }, (_, index) => {
+                const row = Math.floor(index / columnCount) + 1
+                const column = (index % columnCount) + 1
+                const seat = seatByPosition.get(`${row}-${column}`)
+                const registration = seat ? getAssignmentRegistration(seat) : {}
+                const student = getRegistrationStudent(registration)
 
-              return (
-                <button
-                  className={`seat-plan-cell ${seat ? 'seat-plan-cell--assigned' : 'seat-plan-cell--empty'}`}
-                  key={`${row}-${column}`}
-                  onClick={() => openSeatModal(row, column)}
-                  type="button"
-                >
-                  <span>{getSeatCode(row, column)}</span>
-                  {seat ? (
-                    <>
-                      <strong>{student.MaSinhVien || registration.DangKyThiID}</strong>
-                      <em>{student.HoTen || registration.SoBaoDanh || 'Da gan'}</em>
-                    </>
-                  ) : (
-                    <strong>Trong</strong>
-                  )}
-                </button>
-              )
-            })}
+                return (
+                  <button
+                    className={`seat-plan-cell ${seat ? 'seat-plan-cell--assigned' : 'seat-plan-cell--empty'}`}
+                    draggable={Boolean(seat)}
+                    key={`${row}-${column}`}
+                    onClick={() => openSeatModal(row, column)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDragStart={() => seat && setDraggedRegistrationId(String(seat.DangKyThiID))}
+                    onDrop={() => dropRegistrationOnSeat(row, column, seat)}
+                    type="button"
+                  >
+                    <span>{getSeatCode(row, column)}</span>
+                    {seat ? (
+                      <>
+                        <strong>{student.MaSinhVien || registration.DangKyThiID}</strong>
+                        <em>{student.HoTen || registration.SoBaoDanh || 'Da gan'}</em>
+                      </>
+                    ) : (
+                      <strong>Trong</strong>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+
+            <aside
+              className="seat-unassigned-panel"
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => {
+                const seat = seatByRegistration.get(String(draggedRegistrationId))
+                clearSeatByDrop(seat)
+              }}
+            >
+              <div>
+                <p>Chua xep cho</p>
+                <h3>{unseatedAssignments.length} thi sinh</h3>
+              </div>
+              <div className="seat-unassigned-list">
+                {unseatedAssignments.map((assignment) => {
+                  const registration = getAssignmentRegistration(assignment)
+                  const student = getRegistrationStudent(registration)
+
+                  return (
+                    <div
+                      className="seat-unassigned-card"
+                      draggable
+                      key={assignment.PhanPhongID}
+                      onDragStart={() => setDraggedRegistrationId(String(assignment.DangKyThiID))}
+                    >
+                      <strong>{student.HoTen || '-'}</strong>
+                      <span>{registration.SoBaoDanh || `DK ${assignment.DangKyThiID}`} / {student.MaSinhVien || '-'}</span>
+                    </div>
+                  )
+                })}
+                {unseatedAssignments.length === 0 && (
+                  <div className="table-placeholder">Tat ca thi sinh trong phong da co cho ngoi.</div>
+                )}
+              </div>
+            </aside>
           </div>
         ) : (
           <div className="table-placeholder">Can phan phong truoc khi xep cho.</div>
         )}
       </section>
 
-      {activeSeat && (
-        <div className="exam-modal-backdrop" onClick={closeSeatModal}>
-          <form className="exam-modal seat-assign-modal" onClick={(event) => event.stopPropagation()} onSubmit={(event) => event.preventDefault()}>
+      <Dialog
+        open={Boolean(activeSeat)}
+        title="Gan thi sinh vao ghe"
+        onClose={closeSeatModal}
+        width={680}
+      >
+        {activeSeat && (
+          <form className="exam-modal seat-assign-modal" onSubmit={(event) => event.preventDefault()}>
             <div className="exam-form__heading">
               <div>
                 <p>Gan thi sinh vao ghe</p>
                 <h2>{getSeatCode(activeSeat.row, activeSeat.column)}</h2>
               </div>
-              <button className="table-action" onClick={closeSeatModal} type="button">Dong</button>
             </div>
 
-            <div className="exam-form__grid">
-              <label className="exam-form__wide">
-                <span>Thi sinh / Ma dang ky</span>
-                <select onChange={(event) => setSelectedRegistrationId(event.target.value)} required value={selectedRegistrationId}>
+            <FormGrid cols={1}>
+              <Field label="Thi sinh / Ma dang ky" required>
+                <Select onChange={(event) => setSelectedRegistrationId(event.target.value)} required value={selectedRegistrationId}>
                   <option value="">Chon thi sinh</option>
                   {roomAssignments.map((assignment) => {
-                    const registration = assignment.dang_ky_thi || {}
-                    const student = registration.sinh_vien || {}
+                    const registration = getAssignmentRegistration(assignment)
+                    const student = getRegistrationStudent(registration)
                     const existingSeat = seatByRegistration.get(String(assignment.DangKyThiID))
 
                     return (
@@ -446,16 +691,16 @@ function SeatAssignmentPage() {
                       </option>
                     )
                   })}
-                </select>
-              </label>
-            </div>
+                </Select>
+              </Field>
+            </FormGrid>
 
             <div className="seat-modal-current">
               <p>Dang gan</p>
               <strong>
-                {activeSeat.seat?.dang_ky_thi?.sinh_vien?.MaSinhVien || 'Ghe trong'}
+                {getRegistrationStudent(getAssignmentRegistration(activeSeat.seat || {})).MaSinhVien || 'Ghe trong'}
               </strong>
-              <span>{activeSeat.seat?.dang_ky_thi?.sinh_vien?.HoTen || 'Chua co thi sinh'}</span>
+              <span>{getRegistrationStudent(getAssignmentRegistration(activeSeat.seat || {})).HoTen || 'Chua co thi sinh'}</span>
             </div>
 
             <div className="exam-modal__footer">
@@ -470,8 +715,33 @@ function SeatAssignmentPage() {
               </button>
             </div>
           </form>
-        </div>
-      )}
+        )}
+      </Dialog>
+      <ConfirmDialog
+        open={Boolean(pendingSeatDrop)}
+        title="Thay ghe dang co thi sinh"
+        message={`Thay the ghe ${pendingSeatDrop?.seat?.SoCho || ''} bang thi sinh dang keo?`}
+        confirmLabel="Thay the"
+        onCancel={() => {
+          setPendingSeatDrop(null)
+          setDraggedRegistrationId('')
+        }}
+        onConfirm={() => {
+          if (pendingSeatDrop) {
+            saveSeatAt(pendingSeatDrop.row, pendingSeatDrop.column, pendingSeatDrop.registrationId)
+          }
+          setPendingSeatDrop(null)
+        }}
+      />
+      <ConfirmDialog
+        open={isResetConfirmOpen}
+        title="Dat lai phong"
+        message={`Xoa toan bo cho ngoi cua phong ${getRoomLabel(activeRoom)}?`}
+        confirmLabel="Dat lai"
+        danger
+        onCancel={() => setIsResetConfirmOpen(false)}
+        onConfirm={resetRoomSeats}
+      />
     </>
   )
 }

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import AppShell from './components/app-shell/AppShell'
 import { getAuthSession } from './api/authClient'
-import { roleNavAccess } from './data/operationsMockData'
+import { canRoleAccessHash } from './data/roleAccess'
 import BackToTop from './components/BackToTop'
+import { ToastProvider } from './components/common/Toast'
 import DetailSection from './components/DetailSection'
 import FeaturesSection from './components/FeaturesSection'
 import HeroSection from './components/HeroSection'
@@ -28,6 +29,7 @@ import RoomAssignmentPage from './pages/RoomAssignmentPage'
 import RoomsPage from './pages/RoomsPage'
 import SeatAssignmentPage from './pages/SeatAssignmentPage'
 import SubjectsPage from './pages/SubjectsPage'
+import AuditLogPage from './pages/AuditLogPage'
 
 const appPages = {
   '#dashboard': DashboardPage,
@@ -40,6 +42,7 @@ const appPages = {
   '#seat-assignment': SeatAssignmentPage,
   '#attendance': AttendancePage,
   '#account': AccountPage,
+  '#audit-log': AuditLogPage,
 }
 
 function App() {
@@ -78,31 +81,34 @@ function App() {
     }
 
     const roleName = session.user?.TenVaiTro
-    const allowedHashes = roleNavAccess[roleName] || roleNavAccess.SinhVien
-    const safeHash = allowedHashes.includes(hash) ? hash : '#dashboard'
+    const safeHash = canRoleAccessHash(roleName, hash) ? hash : '#dashboard'
     const SafeAppPage = appPages[safeHash]
 
     return (
-      <AppShell currentHash={safeHash}>
-        <SafeAppPage />
-      </AppShell>
+      <ToastProvider>
+        <AppShell currentHash={safeHash}>
+          <SafeAppPage />
+        </AppShell>
+      </ToastProvider>
     )
   }
 
   return (
-    <main className="landing-page" id="top">
-      <SiteHeader navItems={navItems} />
-      <HeroSection orbitNodes={orbitNodes} />
+    <ToastProvider>
+      <main className="landing-page" id="top">
+        <SiteHeader navItems={navItems} />
+        <HeroSection orbitNodes={orbitNodes} />
 
-      <div className="page-container landing-content">
-        <SummarySection summaryBlocks={summaryBlocks} />
-        <FeaturesSection featurePanels={featurePanels} />
-        <DetailSection detailSections={detailSections} />
-      </div>
+        <div className="page-container landing-content">
+          <SummarySection summaryBlocks={summaryBlocks} />
+          <FeaturesSection featurePanels={featurePanels} />
+          <DetailSection detailSections={detailSections} />
+        </div>
 
-      <SiteFooter />
-      <BackToTop isVisible={showBackToTop} />
-    </main>
+        <SiteFooter />
+        <BackToTop isVisible={showBackToTop} />
+      </main>
+    </ToastProvider>
   )
 }
 
